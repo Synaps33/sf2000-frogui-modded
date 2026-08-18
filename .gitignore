@@ -1,0 +1,26 @@
+# Build artifacts and binaries
+*.o
+*.a
+*.elf
+*.bin
+*.map
+*.asd
+*.sf2k
+*.so
+core_*
+cores/menu/*.o
+cores/menu/*.a
+cores/menu/_libretro_*.a
+
+# Archives
+*.zip
+*.7z
+
+# Temporary / Scratch files
+diff.txt
+patch.diff
+patch.py
+test.bin
+test_*.js
+*.orig
+*.rej

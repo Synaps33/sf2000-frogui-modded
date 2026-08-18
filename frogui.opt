@@ -1,0 +1,93 @@
+### [frogui_theme] :[Default Dark] :[Default Dark|Default Light|Ocean Blue|Cyberpunk|Retro Green|Sunset Orange|Purple Neon|Monochrome]
+frogui_theme = "Default Dark"
+
+### [frogui_gfx_theme] :[Emulationstation_NK] :[MinUI|WiiFrog|UltraEpicFrog|WoodFrog|SimUI|Arcade_Planet|Customvita_NK|Emulationstation_NK|ES-epicnoir_NK|ES-retroboys|Switch]
+frogui_gfx_theme = "WiiFrog"
+
+### [frogui_font] :[Builtin 6x8] :[Builtin 6x8|Builtin 8x8|Default 12px|Large 16px|Retro 8-bit]
+frogui_font = "Builtin 6x8"
+
+### [frogui_menu_layout] :[theme_default] :[theme_default|vertical|horizontal|2_columns|3_columns]
+frogui_menu_layout = "theme_default"
+
+### [frogui_game_list_layout] :[theme_default] :[theme_default|vertical|horizontal|2_columns|3_columns]
+frogui_game_list_layout = "theme_default"
+
+### [frogui_grid_navigation] :[vertical] :[vertical|horizontal|2_columns|3_columns]
+frogui_grid_navigation = "vertical"
+
+### [frogui_hide_system_names] :[theme_default] :[theme_default|false|true]
+frogui_hide_system_names = "theme_default"
+
+### [frogui_hide_header_text] :[theme_default] :[theme_default|true|false]
+frogui_hide_header_text = "theme_default"
+
+### [frogui_hide_game_names] :[theme_default] :[theme_default|false|true]
+frogui_hide_game_names = "theme_default"
+
+### [frogui_game_name_color] :[theme_default] :[theme_default|white|black|red|green|blue|yellow|cyan|magenta|gray|orange|purple]
+frogui_game_name_color = "theme_default"
+
+### [frogui_xmb_waves] :[theme_default] :[theme_default|true|false]
+frogui_xmb_waves = "theme_default"
+
+### [frogui_xmb_wave_color] :[theme_default] :[theme_default|white|black|red|green|blue|yellow|cyan|magenta|gray|orange|purple]
+frogui_xmb_wave_color = "theme_default"
+
+### [frogui_xmb_wave_glow] :[high] :[theme_default|low|medium|high]
+frogui_xmb_wave_glow = "high"
+
+### [frogui_xmb_wave_variety] :[complex] :[theme_default|single|dual|complex]
+frogui_xmb_wave_variety = "complex"
+
+### [frogui_show_icons] :[theme_default] :[theme_default|true|false]
+frogui_show_icons = "theme_default"
+
+### [frogui_show_game_icons] :[theme_default] :[false|true|theme_default]
+frogui_show_game_icons = "theme_default"
+
+### [frogui_anim_speed] :[fast] :[theme_default|normal|fast|instant|slow|very_slow]
+frogui_anim_speed = "fast"
+
+### [frogui_bg_anim_mode] :[scroll_h] :[fade|scroll_h|scroll_v|none|theme_default]
+frogui_bg_anim_mode = "theme_default"
+
+### [frogui_hide_footer] :[false] :[false|true]
+frogui_hide_footer = "false"
+
+### [frogui_sections_visibility] :[Open Submenu] :[Open Submenu]
+frogui_sections_visibility = "Open Submenu"
+
+### [frogui_text_in_empty_icon] :[theme_default] :[theme_default|true|false]
+frogui_text_in_empty_icon = "theme_default"
+
+### [frogui_game_text_in_empty] :[theme_default] :[theme_default|true|false]
+frogui_game_text_in_empty = "theme_default"
+
+### [frogui_show_empty_icon_bg] :[theme_default] :[theme_default|true|false]
+frogui_show_empty_icon_bg = "theme_default"
+
+### [frogui_show_selected_icon_bg] :[theme_default] :[theme_default|true|false]
+frogui_show_selected_icon_bg = "theme_default"
+
+### [frogui_dim_unselected_icons] :[theme_default] :[theme_default|false|true]
+frogui_dim_unselected_icons = "theme_default"
+
+### [frogui_resume_on_boot] :[false] :[false|true]
+frogui_resume_on_boot = "false"
+
+### [frogui_hide_empty] :[true] :[true|false]
+frogui_hide_empty = "true"
+
+### [frogui_list_pillbox] :[true] :[false|true]
+frogui_list_pillbox = "true"
+
+### [frogui_hidden_sections] :[<cores>,menu] :[]
+frogui_hidden_sections = "<cores>,menu"
+
+### [gba] :[gbac] :[gba|gbac]
+gba = "gbac"
+
+### [nes] :[nes] :[nes]
+nes = "nes"
+
