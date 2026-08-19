@@ -707,8 +707,12 @@ static float anim_selected_index = 0.0f;
 static int get_grid_cols(void) {
     const char *layout = get_effective_menu_layout();
     if (!layout) return 1;
-    if (strcmp(layout, "2_columns") == 0) return 2;
-    if (strcmp(layout, "3_columns") == 0) return 3;
+    if (strcmp(layout, "3_columns") == 0 || strcmp(layout, "grid_3_columns") == 0 || strcmp(layout, "grid_3") == 0) return 3;
+    if (strcmp(layout, "2_columns") == 0 || strcmp(layout, "grid_2_columns") == 0 || strcmp(layout, "grid_2") == 0) return 2;
+    if (strcmp(layout, "grid") == 0) {
+        int c = gfx_theme_get_grid_cols();
+        return (c == 3) ? 3 : 2;
+    }
     return 1;
 }
 
@@ -2452,7 +2456,9 @@ static int last_platform_idx = -1;
                             item_selected, anim_selected_index, 0);
         }
     } else {
-        for (int i = scroll_offset; i < entry_count && i < scroll_offset + visible_items; i++) {
+        int grid_cols = get_grid_cols();
+        int max_visible = (grid_cols > 1) ? visible_items * grid_cols : visible_items;
+        for (int i = scroll_offset; i < entry_count && i < scroll_offset + max_visible; i++) {
             // Get display name (with scrolling for selected item)
             char display_name[MAX_FILENAME_DISPLAY_LEN + 4];
             get_scrolling_text(entries[i].name, (i == selected_index), display_name, sizeof(display_name));
@@ -3510,32 +3516,6 @@ static void handle_input() {
         prev_input[8] = right;
     }
 
-    // Grid navigation support for LEFT/RIGHT when header is not selected
-    int grid_cols = get_grid_cols();
-    if (!header_selected && grid_cols > 1) {
-        if (prev_input[7] && !left) { // LEFT
-            if (selected_index % grid_cols > 0) {
-                selected_index--;
-                if (selected_index < scroll_offset) {
-                    scroll_offset = (selected_index / grid_cols) * grid_cols;
-                }
-                prev_input[7] = left;
-                return;
-            }
-        }
-        if (prev_input[8] && !right) { // RIGHT
-            if ((selected_index % grid_cols < grid_cols - 1) && (selected_index + 1 < entry_count)) {
-                selected_index++;
-                int visible_items = render_get_visible_items();
-                if (selected_index >= scroll_offset + visible_items * grid_cols) {
-                    scroll_offset = ((selected_index - (visible_items * grid_cols) + 1) / grid_cols + 1) * grid_cols;
-                }
-                prev_input[8] = right;
-                return;
-            }
-        }
-    }
-
     // Handle X button to hide highlighted section on main platform menu
     if (render_is_in_platform_menu() && !header_selected && prev_input[9] && !x) {
         if (selected_index >= 0 && selected_index < entry_count) {
@@ -3631,6 +3611,8 @@ static void handle_input() {
     } else {
         // --- VERTICAL LIST / GRID MENU MODE ---
         int grid_cols = get_grid_cols();
+        int visible_items = render_get_visible_items();
+        int visible_total = (grid_cols > 1) ? visible_items * grid_cols : visible_items;
 
         if (!header_selected && grid_cols == 1) {
             if ((prev_input[7] && !left) || (prev_input[8] && !right)) { // LEFT or RIGHT
@@ -3656,9 +3638,8 @@ static void handle_input() {
             if (prev_input[8] && !right) { // RIGHT
                 if ((selected_index % grid_cols < grid_cols - 1) && (selected_index + 1 < entry_count)) {
                     selected_index++;
-                    int visible_items = render_get_visible_items();
-                    if (selected_index >= scroll_offset + visible_items * grid_cols) {
-                        scroll_offset = ((selected_index - (visible_items * grid_cols) + 1) / grid_cols + 1) * grid_cols;
+                    if (selected_index >= scroll_offset + visible_total) {
+                        scroll_offset = ((selected_index - visible_total + 1) / grid_cols + 1) * grid_cols;
                     }
                 }
                 prev_input[8] = right;
@@ -3675,10 +3656,19 @@ static void handle_input() {
                     scroll_offset = (selected_index / grid_cols) * grid_cols;
                 }
             } else {
-                selected_index = entry_count - 1;
-                int visible_items = render_get_visible_items();
-                if (selected_index >= scroll_offset + visible_items * grid_cols) {
-                    scroll_offset = ((selected_index - (visible_items * grid_cols) + 1) / grid_cols + 1) * grid_cols;
+                if (at_main_menu) {
+                    header_selected = 1;
+                } else if (entry_count > 0) {
+                    int last_row_start = ((entry_count - 1) / grid_cols) * grid_cols;
+                    int target_idx = last_row_start + (selected_index % grid_cols);
+                    if (target_idx >= entry_count) target_idx = entry_count - 1;
+                    selected_index = target_idx;
+                    if (selected_index >= scroll_offset + visible_total) {
+                        scroll_offset = (selected_index / grid_cols) * grid_cols;
+                        if (scroll_offset >= visible_total) {
+                            scroll_offset = ((selected_index - visible_total + 1) / grid_cols + 1) * grid_cols;
+                        }
+                    }
                 }
             }
             prev_input[0] = up;
@@ -3692,59 +3682,76 @@ static void handle_input() {
                 scroll_offset = 0;
             } else if (selected_index + grid_cols < entry_count) {
                 selected_index += grid_cols;
-                int visible_items = render_get_visible_items();
-                if (selected_index >= scroll_offset + visible_items * grid_cols) {
-                    scroll_offset = ((selected_index - (visible_items * grid_cols) + 1) / grid_cols + 1) * grid_cols;
+                if (selected_index >= scroll_offset + visible_total) {
+                    scroll_offset = ((selected_index - visible_total + 1) / grid_cols + 1) * grid_cols;
                 }
-            } else if (selected_index < entry_count - 1) {
+            } else if (selected_index < entry_count - 1 && (selected_index / grid_cols) < ((entry_count - 1) / grid_cols)) {
                 selected_index = entry_count - 1;
+                if (selected_index >= scroll_offset + visible_total) {
+                    scroll_offset = ((selected_index - visible_total + 1) / grid_cols + 1) * grid_cols;
+                }
             } else {
-                selected_index = 0;
-                scroll_offset = 0;
+                if (at_main_menu) {
+                    header_selected = 1;
+                } else {
+                    selected_index = selected_index % grid_cols;
+                    if (selected_index >= entry_count) selected_index = 0;
+                    scroll_offset = 0;
+                }
             }
+            prev_input[1] = down;
         }
     }
 
-    // Handle L button (move up by 7 entries)
+    // Handle L button (page up)
     if (prev_input[4] && !l) {
-        if (selected_index >= 7) {
-            selected_index -= 7;
-            // Adjust scroll_offset if necessary
+        int grid_cols = get_grid_cols();
+        int step = (grid_cols > 1) ? visible_items * grid_cols : 7;
+        if (selected_index >= step) {
+            selected_index -= step;
             if (selected_index < scroll_offset) {
-                scroll_offset = selected_index;
+                scroll_offset = (grid_cols > 1) ? (selected_index / grid_cols) * grid_cols : selected_index;
             }
         } else {
-            // At the beginning - check if we should go to header first
-            // Only for main menu sections that have a header
             int is_main_section = (strcmp(current_path, ROMS_PATH) == 0 ||
                                    strcmp(current_path, "MAIN_MENU") == 0 ||
                                    strcmp(current_path, "TOOLS") == 0);
             if (is_main_section && !header_selected) {
-                // Go to header first
                 header_selected = 1;
-                vb_set_focused(0);  // Unfocus browser if active
+                vb_set_focused(0);
             } else {
-                // Loop to the bottom when reaching the top
-                selected_index = entry_count - 1;
-                scroll_offset = (entry_count > visible_items) ? entry_count - visible_items : 0;
+                selected_index = entry_count > 0 ? entry_count - 1 : 0;
+                if (grid_cols > 1) {
+                    int visible_total = visible_items * grid_cols;
+                    scroll_offset = (entry_count > visible_total) ? ((entry_count - visible_total + grid_cols - 1) / grid_cols) * grid_cols : 0;
+                } else {
+                    scroll_offset = (entry_count > visible_items) ? entry_count - visible_items : 0;
+                }
                 if (is_main_section) {
-                    header_selected = 0;  // Deselect header when wrapping
+                    header_selected = 0;
                 }
             }
         }
     }
 
-    // Handle R button (move down by 7 entries)
+    // Handle R button (page down)
     if (prev_input[5] && !r) {
-        if (selected_index < entry_count - 7) {
-            selected_index += 7;
+        int grid_cols = get_grid_cols();
+        int step = (grid_cols > 1) ? visible_items * grid_cols : 7;
+        int visible_total = (grid_cols > 1) ? visible_items * grid_cols : visible_items;
+        if (selected_index < entry_count - step) {
+            selected_index += step;
         } else {
-            // Loop to the top when reaching the bottom
-            selected_index = (selected_index + 7) % entry_count;  // Wrap around to the top
+            selected_index = (entry_count > 0) ? (selected_index + step) % entry_count : 0;
         }
-        // Adjust scroll_offset if necessary
-        if (selected_index >= scroll_offset + visible_items) {
-            scroll_offset = selected_index - visible_items + 1;
+        if (selected_index >= scroll_offset + visible_total) {
+            if (grid_cols > 1) {
+                scroll_offset = ((selected_index - visible_total + 1) / grid_cols + 1) * grid_cols;
+            } else {
+                scroll_offset = selected_index - visible_items + 1;
+            }
+        } else if (selected_index < scroll_offset) {
+            scroll_offset = (grid_cols > 1) ? (selected_index / grid_cols) * grid_cols : selected_index;
         }
     }
 

@@ -126,6 +126,17 @@ typedef struct {
     int horizontal_tile_h;
     int horizontal_item_spacing;
 
+    // Custom grid menu dimensions and spacing from theme.ini
+    int grid_cols;
+    int grid_tile_w;
+    int grid_tile_h;
+    int grid_spacing_x;
+    int grid_spacing_y;
+    int grid_bottom_spacing;
+    int grid_x;
+    int grid_y;
+    int grid_visible_rows;
+
     // Custom label positioning from theme.ini (separate for platform menu vs game list)
     int platform_label_y;          // Absolute Y coordinate (0 = use offset)
     int platform_label_offset_y;   // Y offset from tile bottom (default 12)
@@ -165,6 +176,17 @@ int gfx_theme_get_horizontal_y(void);
 int gfx_theme_get_horizontal_tile_w(void);
 int gfx_theme_get_horizontal_tile_h(void);
 int gfx_theme_get_horizontal_item_spacing(void);
+
+// Grid menu getters
+int gfx_theme_get_grid_cols(void);
+int gfx_theme_get_grid_tile_w(int cols);
+int gfx_theme_get_grid_tile_h(int cols);
+int gfx_theme_get_grid_spacing_x(int cols);
+int gfx_theme_get_grid_spacing_y(int cols);
+int gfx_theme_get_grid_bottom_spacing(void);
+int gfx_theme_get_grid_x(int cols);
+int gfx_theme_get_grid_y(void);
+int gfx_theme_get_grid_visible_rows(void);
 
 bool gfx_theme_get_hide_header_text(void);
 bool gfx_theme_has_custom_hide_header_text(void);

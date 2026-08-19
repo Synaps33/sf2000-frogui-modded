@@ -210,9 +210,9 @@ static void register_all_default_settings(void) {
     add_default_setting_if_missing("frogui_theme", "Default Dark", "Default Dark|Default Light|Ocean Blue|Cyberpunk|Retro Green|Sunset Orange|Purple Neon|Monochrome");
     add_default_setting_if_missing("frogui_gfx_theme", "theme_default", "");
     add_default_setting_if_missing("frogui_font", "Builtin 6x8", "Builtin 6x8|Builtin 8x8|Default 12px|Large 16px|Retro 8-bit");
-    add_default_setting_if_missing("frogui_menu_layout", "theme_default", "theme_default|vertical|horizontal|2_columns|3_columns");
-    add_default_setting_if_missing("frogui_game_list_layout", "theme_default", "theme_default|vertical|horizontal|2_columns|3_columns");
-    add_default_setting_if_missing("frogui_grid_navigation", "vertical", "vertical|horizontal|2_columns|3_columns");
+    add_default_setting_if_missing("frogui_menu_layout", "theme_default", "theme_default|vertical|horizontal|grid|2_columns|3_columns|grid_2_columns|grid_3_columns");
+    add_default_setting_if_missing("frogui_game_list_layout", "theme_default", "theme_default|vertical|horizontal|grid|2_columns|3_columns|grid_2_columns|grid_3_columns");
+    add_default_setting_if_missing("frogui_grid_navigation", "vertical", "vertical|horizontal|grid|2_columns|3_columns|grid_2_columns|grid_3_columns");
     add_default_setting_if_missing("frogui_hide_system_names", "theme_default", "theme_default|true|false");
     add_default_setting_if_missing("frogui_hide_header_text", "theme_default", "theme_default|true|false");
     add_default_setting_if_missing("frogui_hide_game_names", "theme_default", "theme_default|false|true");

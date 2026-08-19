@@ -731,8 +731,9 @@ void render_menu_item(uint16_t *framebuffer, int index, const char *name, const 
 
     int cols = 1;
     if (grid_setting) {
-        if (strcmp(grid_setting, "2_columns") == 0) cols = 2;
-        else if (strcmp(grid_setting, "3_columns") == 0) cols = 3;
+        if (strcmp(grid_setting, "2_columns") == 0 || strcmp(grid_setting, "grid_2_columns") == 0 || strcmp(grid_setting, "grid_2") == 0) cols = 2;
+        else if (strcmp(grid_setting, "3_columns") == 0 || strcmp(grid_setting, "grid_3_columns") == 0 || strcmp(grid_setting, "grid_3") == 0) cols = 3;
+        else if (strcmp(grid_setting, "grid") == 0) cols = gfx_theme_get_grid_cols();
     }
 
     int visible_index = index - scroll_offset;
@@ -740,6 +741,162 @@ void render_menu_item(uint16_t *framebuffer, int index, const char *name, const 
 
     int col = visible_index % cols;
     int row = visible_index / cols;
+
+    if (cols > 1 && show_icons) {
+        int grid_x = gfx_theme_get_grid_x(cols);
+        int grid_y = gfx_theme_get_grid_y();
+        int tile_w = gfx_theme_get_grid_tile_w(cols);
+        int tile_h = gfx_theme_get_grid_tile_h(cols);
+        int spacing_x = gfx_theme_get_grid_spacing_x(cols);
+        int spacing_y = gfx_theme_get_grid_spacing_y(cols);
+
+        int item_x = grid_x + col * spacing_x;
+        int item_y = grid_y + row * spacing_y;
+
+        uint16_t *logo_pixels = NULL;
+        uint8_t *logo_alpha = NULL;
+        int logo_w = 0, logo_h = 0;
+        bool local_thumb_allocated = false;
+        bool local_alpha_allocated = false;
+        bool has_logo = gfx_theme_load_entry_logo(name, in_platform_menu, &logo_pixels, &logo_alpha, &logo_w, &logo_h);
+
+        bool sel_bg = true;
+        const char *sel_bg_setting = settings_get_value("frogui_show_selected_icon_bg");
+        if (gfx_theme_has_custom_show_selected_icon_bg() && (!sel_bg_setting || strcmp(sel_bg_setting, "theme_default") == 0)) {
+            sel_bg = gfx_theme_get_show_selected_icon_bg();
+        } else if (sel_bg_setting && strcmp(sel_bg_setting, "false") == 0) {
+            sel_bg = false;
+        }
+
+        bool dim_unsel = false;
+        const char *dim_setting = settings_get_value("frogui_dim_unselected_icons");
+        if (gfx_theme_has_custom_dim_unselected_icons() && (!dim_setting || strcmp(dim_setting, "theme_default") == 0)) {
+            dim_unsel = gfx_theme_get_dim_unselected_icons();
+        } else if (dim_setting && strcmp(dim_setting, "true") == 0) {
+            dim_unsel = true;
+        }
+
+        bool empty_bg = true;
+        const char *empty_bg_setting = settings_get_value("frogui_show_empty_icon_bg");
+        if (gfx_theme_has_custom_show_empty_icon_bg() && (!empty_bg_setting || strcmp(empty_bg_setting, "theme_default") == 0)) {
+            empty_bg = gfx_theme_get_show_empty_icon_bg();
+        } else if (empty_bg_setting && strcmp(empty_bg_setting, "false") == 0) {
+            empty_bg = false;
+        }
+
+        if (!in_platform_menu && game_path && game_path[0] != '\0' && !has_logo) {
+            char path1[256];
+            get_thumbnail_path(game_path, path1, sizeof(path1));
+            char *d1 = strrchr(path1, '.');
+            if (d1) strcpy(d1, "-icon.rgb565");
+
+            char path2[256];
+            strncpy(path2, game_path, sizeof(path2) - 1);
+            path2[sizeof(path2) - 1] = '\0';
+            char *d2 = strrchr(path2, '.');
+            if (d2) strcpy(d2, "-icon.rgb565");
+            else strncat(path2, "-icon.rgb565", sizeof(path2) - strlen(path2) - 1);
+
+            uint16_t *cached_px = NULL;
+            int cached_w = 0, cached_h = 0;
+            if (get_horiz_cached_thumb(path1, &cached_px, &cached_w, &cached_h)) {
+                if (cached_px) {
+                    logo_pixels = cached_px;
+                    logo_alpha = NULL;
+                    logo_w = cached_w;
+                    logo_h = cached_h;
+                    has_logo = true;
+                }
+            } else {
+                uint16_t *raw_pixels = NULL;
+                int raw_w = 0, raw_h = 0;
+                if (load_raw_horiz_rgb565(path1, &raw_pixels, &raw_w, &raw_h) ||
+                    load_raw_horiz_rgb565(path2, &raw_pixels, &raw_w, &raw_h)) {
+                    logo_pixels = raw_pixels;
+                    logo_alpha = NULL;
+                    logo_w = raw_w;
+                    logo_h = raw_h;
+                    has_logo = true;
+                    add_horiz_cached_thumb(path1, raw_pixels, raw_w, raw_h);
+                    local_thumb_allocated = true;
+                } else {
+                    char path2_png[256];
+                    strncpy(path2_png, path2, sizeof(path2_png) - 1);
+                    path2_png[sizeof(path2_png) - 1] = '\0';
+                    char *ext = strstr(path2_png, ".rgb565");
+                    if (ext) strcpy(ext, ".png");
+
+                    uint8_t *raw_alpha = NULL;
+                    extern int load_png_rgba565(const char* filename, uint16_t** pixels, uint8_t** alpha, int* width, int* height);
+                    if (load_png_rgba565(path2_png, &raw_pixels, &raw_alpha, &raw_w, &raw_h)) {
+                        logo_pixels = raw_pixels;
+                        logo_alpha = raw_alpha;
+                        logo_w = raw_w;
+                        logo_h = raw_h;
+                        has_logo = true;
+                        local_thumb_allocated = true;
+                        local_alpha_allocated = true;
+                    }
+                }
+            }
+        }
+
+        if (has_logo) {
+            if (is_selected && sel_bg) {
+                render_rounded_rect(framebuffer, item_x - 3, item_y - 3, tile_w + 6, tile_h + 6, 6, COLOR_SELECT_BG);
+            }
+            uint8_t alpha_mult = 255;
+            if (!is_selected && dim_unsel) {
+                alpha_mult = 128;
+            }
+            render_draw_image_sized(framebuffer, item_x, item_y, tile_w, tile_h, logo_pixels, logo_alpha, logo_w, logo_h, alpha_mult);
+        } else {
+            if (is_selected) {
+                if (sel_bg) {
+                    render_rounded_rect(framebuffer, item_x, item_y, tile_w, tile_h, 6, COLOR_SELECT_BG);
+                }
+            } else {
+                if (empty_bg) {
+                    render_rounded_rect(framebuffer, item_x, item_y, tile_w, tile_h, 6, 0x18C3);
+                }
+            }
+
+            int text_w = font_measure_text(name);
+            int text_x = item_x + (tile_w - text_w) / 2;
+            if (text_x < item_x + 2) text_x = item_x + 2;
+            int text_y = item_y + (tile_h - FONT_CHAR_HEIGHT) / 2;
+            font_draw_text(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, text_x, text_y, name, is_selected ? COLOR_SELECT_TEXT : COLOR_TEXT);
+        }
+
+        // Label below tile if not hidden
+        if (!hide_system_name && has_logo) {
+            int label_w = font_measure_text(name);
+            int label_x = item_x + (tile_w - label_w) / 2;
+            if (label_x < 2) label_x = 2;
+            if (label_x + label_w > SCREEN_WIDTH - 2) label_x = SCREEN_WIDTH - label_w - 2;
+            int label_y = item_y + tile_h + 3;
+
+            const char *use_pillbox = settings_get_value("frogui_list_pillbox");
+            if (is_selected) {
+                if (use_pillbox && strcmp(use_pillbox, "true") == 0) {
+                    render_text_pillbox(framebuffer, label_x, label_y, name, 0x4A49, game_name_color, 4);
+                } else {
+                    render_text_pillbox(framebuffer, label_x, label_y, name, 0x0000, game_name_color, 4);
+                }
+            } else {
+                font_draw_text_outlined(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, label_x, label_y, name, COLOR_TEXT);
+            }
+        }
+
+        if (local_thumb_allocated && logo_pixels) {
+            free((void*)logo_pixels);
+        }
+        if (local_alpha_allocated && logo_alpha) {
+            free((void*)logo_alpha);
+        }
+        return;
+    }
+
     int col_width = (SCREEN_WIDTH - 2 * list_x) / cols;
     int item_x = list_x + col * col_width;
     int y = list_y + row * item_height;
@@ -2120,6 +2277,15 @@ void render_clear_screen_gfx(uint16_t *framebuffer) {
 
 // Get current visible items count (from gfx_theme if active, otherwise default)
 int render_get_visible_items(void) {
+    const char *grid_setting = in_platform_menu ? settings_get_value("frogui_menu_layout") : settings_get_value("frogui_game_list_layout");
+    if (!grid_setting || strcmp(grid_setting, "theme_default") == 0) {
+        grid_setting = in_platform_menu ? gfx_theme_get_menu_layout() : gfx_theme_get_game_list_layout();
+    }
+    if (grid_setting && (strcmp(grid_setting, "grid") == 0 || strcmp(grid_setting, "2_columns") == 0 || strcmp(grid_setting, "3_columns") == 0 || strcmp(grid_setting, "grid_2_columns") == 0 || strcmp(grid_setting, "grid_3_columns") == 0 || strcmp(grid_setting, "grid_2") == 0 || strcmp(grid_setting, "grid_3") == 0)) {
+        int custom_rows = gfx_theme_get_grid_visible_rows();
+        if (custom_rows > 0) return custom_rows;
+        return 2;
+    }
     if (gfx_theme_is_active()) {
         const GfxThemeLayout* layout = gfx_theme_get_layout();
         if (layout) {

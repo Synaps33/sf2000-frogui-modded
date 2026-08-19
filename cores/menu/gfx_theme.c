@@ -375,6 +375,40 @@ static int parse_theme_ini(const char* ini_path, GfxTheme* theme) {
         } else if (strcasecmp(key, "item_spacing") == 0 || strcasecmp(key, "carousel_spacing") == 0 || strcasecmp(key, "horizontal_item_spacing") == 0) {
             theme->horizontal_item_spacing = atoi(value);
             continue;
+        } else if (strcasecmp(key, "grid_cols") == 0 || strcasecmp(key, "grid_columns") == 0 || strcasecmp(key, "columns") == 0) {
+            theme->grid_cols = atoi(value);
+            continue;
+        } else if (strcasecmp(key, "grid_tile_size") == 0 || strcasecmp(key, "grid_logo_size") == 0) {
+            int s = atoi(value);
+            if (s > 0) {
+                theme->grid_tile_w = s;
+                theme->grid_tile_h = s;
+            }
+            continue;
+        } else if (strcasecmp(key, "grid_tile_w") == 0 || strcasecmp(key, "grid_tile_width") == 0 || strcasecmp(key, "grid_logo_w") == 0) {
+            theme->grid_tile_w = atoi(value);
+            continue;
+        } else if (strcasecmp(key, "grid_tile_h") == 0 || strcasecmp(key, "grid_tile_height") == 0 || strcasecmp(key, "grid_logo_h") == 0) {
+            theme->grid_tile_h = atoi(value);
+            continue;
+        } else if (strcasecmp(key, "grid_spacing_x") == 0 || strcasecmp(key, "grid_spacing") == 0 || strcasecmp(key, "grid_item_spacing") == 0 || strcasecmp(key, "grid_item_spacing_x") == 0) {
+            theme->grid_spacing_x = atoi(value);
+            continue;
+        } else if (strcasecmp(key, "grid_spacing_y") == 0 || strcasecmp(key, "grid_row_spacing") == 0 || strcasecmp(key, "grid_item_spacing_y") == 0) {
+            theme->grid_spacing_y = atoi(value);
+            continue;
+        } else if (strcasecmp(key, "grid_bottom_spacing") == 0 || strcasecmp(key, "bottom_spacing") == 0 || strcasecmp(key, "icon_spacing_bottom") == 0 || strcasecmp(key, "platform_icon_spacing") == 0 || strcasecmp(key, "bottom_icon_spacing") == 0) {
+            theme->grid_bottom_spacing = atoi(value);
+            continue;
+        } else if (strcasecmp(key, "grid_x") == 0 || strcasecmp(key, "grid_start_x") == 0) {
+            theme->grid_x = atoi(value);
+            continue;
+        } else if (strcasecmp(key, "grid_y") == 0 || strcasecmp(key, "grid_start_y") == 0) {
+            theme->grid_y = atoi(value);
+            continue;
+        } else if (strcasecmp(key, "grid_visible_rows") == 0 || strcasecmp(key, "grid_rows") == 0) {
+            theme->grid_visible_rows = atoi(value);
+            continue;
         } else if (strcasecmp(key, "platform_label_y") == 0 || strcasecmp(key, "system_label_y") == 0 || strcasecmp(key, "menu_label_y") == 0 || strcasecmp(key, "system_y") == 0 || strcasecmp(key, "platform_y") == 0 || strcasecmp(key, "label_y") == 0) {
             theme->platform_label_y = atoi(value);
             continue;
@@ -561,6 +595,30 @@ static int parse_theme_ini(const char* ini_path, GfxTheme* theme) {
                 theme->horizontal_tile_h = atoi(value);
             } else if (strcasecmp(key, "item_spacing") == 0 || strcasecmp(key, "carousel_spacing") == 0 || strcasecmp(key, "horizontal_item_spacing") == 0) {
                 theme->horizontal_item_spacing = atoi(value);
+            } else if (strcasecmp(key, "grid_cols") == 0 || strcasecmp(key, "grid_columns") == 0 || strcasecmp(key, "columns") == 0) {
+                theme->grid_cols = atoi(value);
+            } else if (strcasecmp(key, "grid_tile_size") == 0 || strcasecmp(key, "grid_logo_size") == 0) {
+                int s = atoi(value);
+                if (s > 0) {
+                    theme->grid_tile_w = s;
+                    theme->grid_tile_h = s;
+                }
+            } else if (strcasecmp(key, "grid_tile_w") == 0 || strcasecmp(key, "grid_tile_width") == 0 || strcasecmp(key, "grid_logo_w") == 0) {
+                theme->grid_tile_w = atoi(value);
+            } else if (strcasecmp(key, "grid_tile_h") == 0 || strcasecmp(key, "grid_tile_height") == 0 || strcasecmp(key, "grid_logo_h") == 0) {
+                theme->grid_tile_h = atoi(value);
+            } else if (strcasecmp(key, "grid_spacing_x") == 0 || strcasecmp(key, "grid_spacing") == 0 || strcasecmp(key, "grid_item_spacing") == 0 || strcasecmp(key, "grid_item_spacing_x") == 0) {
+                theme->grid_spacing_x = atoi(value);
+            } else if (strcasecmp(key, "grid_spacing_y") == 0 || strcasecmp(key, "grid_row_spacing") == 0 || strcasecmp(key, "grid_item_spacing_y") == 0) {
+                theme->grid_spacing_y = atoi(value);
+            } else if (strcasecmp(key, "grid_bottom_spacing") == 0 || strcasecmp(key, "bottom_spacing") == 0 || strcasecmp(key, "icon_spacing_bottom") == 0 || strcasecmp(key, "platform_icon_spacing") == 0 || strcasecmp(key, "bottom_icon_spacing") == 0) {
+                theme->grid_bottom_spacing = atoi(value);
+            } else if (strcasecmp(key, "grid_x") == 0 || strcasecmp(key, "grid_start_x") == 0) {
+                theme->grid_x = atoi(value);
+            } else if (strcasecmp(key, "grid_y") == 0 || strcasecmp(key, "grid_start_y") == 0) {
+                theme->grid_y = atoi(value);
+            } else if (strcasecmp(key, "grid_visible_rows") == 0 || strcasecmp(key, "grid_rows") == 0) {
+                theme->grid_visible_rows = atoi(value);
             }
             // v32: Game screenshot area (also can be in [layout])
             else if (strcasecmp(key, "game_screenshot_x_start") == 0) {
@@ -1164,6 +1222,69 @@ int gfx_theme_get_horizontal_item_spacing(void) {
         return gfx_themes[current_gfx_theme].horizontal_item_spacing;
     }
     return 95;
+}
+
+int gfx_theme_get_grid_cols(void) {
+    if (current_gfx_theme >= 0 && gfx_themes[current_gfx_theme].grid_cols > 0) {
+        return (gfx_themes[current_gfx_theme].grid_cols == 3) ? 3 : 2;
+    }
+    return 2;
+}
+
+int gfx_theme_get_grid_tile_w(int cols) {
+    if (current_gfx_theme >= 0 && gfx_themes[current_gfx_theme].grid_tile_w > 0) {
+        return gfx_themes[current_gfx_theme].grid_tile_w;
+    }
+    return (cols == 3) ? 80 : 120;
+}
+
+int gfx_theme_get_grid_tile_h(int cols) {
+    if (current_gfx_theme >= 0 && gfx_themes[current_gfx_theme].grid_tile_h > 0) {
+        return gfx_themes[current_gfx_theme].grid_tile_h;
+    }
+    return (cols == 3) ? 60 : 70;
+}
+
+int gfx_theme_get_grid_spacing_x(int cols) {
+    if (current_gfx_theme >= 0 && gfx_themes[current_gfx_theme].grid_spacing_x > 0) {
+        return gfx_themes[current_gfx_theme].grid_spacing_x;
+    }
+    return (cols == 3) ? 95 : 140;
+}
+
+int gfx_theme_get_grid_spacing_y(int cols) {
+    if (current_gfx_theme >= 0 && gfx_themes[current_gfx_theme].grid_spacing_y > 0) {
+        return gfx_themes[current_gfx_theme].grid_spacing_y;
+    }
+    return (cols == 3) ? 72 : 82;
+}
+
+int gfx_theme_get_grid_bottom_spacing(void) {
+    if (current_gfx_theme >= 0 && gfx_themes[current_gfx_theme].grid_bottom_spacing > 0) {
+        return gfx_themes[current_gfx_theme].grid_bottom_spacing;
+    }
+    return 12;
+}
+
+int gfx_theme_get_grid_x(int cols) {
+    if (current_gfx_theme >= 0 && gfx_themes[current_gfx_theme].grid_x > 0) {
+        return gfx_themes[current_gfx_theme].grid_x;
+    }
+    return (cols == 3) ? 20 : 25;
+}
+
+int gfx_theme_get_grid_y(void) {
+    if (current_gfx_theme >= 0 && gfx_themes[current_gfx_theme].grid_y > 0) {
+        return gfx_themes[current_gfx_theme].grid_y;
+    }
+    return 40;
+}
+
+int gfx_theme_get_grid_visible_rows(void) {
+    if (current_gfx_theme >= 0 && gfx_themes[current_gfx_theme].grid_visible_rows > 0) {
+        return gfx_themes[current_gfx_theme].grid_visible_rows;
+    }
+    return 2;
 }
 
 void gfx_theme_set_bg_anim_direction(int dir) {
