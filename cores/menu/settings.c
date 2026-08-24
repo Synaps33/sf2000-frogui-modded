@@ -557,6 +557,26 @@ void settings_cycle_option(int index) {
     }
 }
 
+void settings_cycle_option_prev(int index) {
+    if (index < 0 || index >= settings_count) return;
+    if (settings[index].value_count == 0) return;
+    
+    settings[index].current_index = (settings[index].current_index - 1 + settings[index].value_count) % settings[index].value_count;
+    strncpy(settings[index].current_value, 
+           settings[index].possible_values[settings[index].current_index], 
+           MAX_OPTION_VALUE_LEN - 1);
+    settings[index].current_value[MAX_OPTION_VALUE_LEN - 1] = '\0';
+
+    // Apply immediately for certain settings
+    if (strcmp(settings[index].name, "frogui_gfx_theme") == 0) {
+        gfx_theme_apply_by_name(settings[index].current_value);
+    } else if (strcmp(settings[index].name, "frogui_theme") == 0) {
+        apply_theme_from_settings();
+    } else if (strcmp(settings[index].name, "frogui_font") == 0) {
+        apply_font_from_settings();
+    }
+}
+
 void settings_show_menu(void) {
     settings_active = 1;
     // v32: Remember position between openings - don't reset selection
@@ -699,7 +719,7 @@ int settings_handle_input(int up, int down, int left, int right, int a, int b, i
     // Don't allow any input while saving is in progress
     if (settings_saving) return 1;
 
-    int max_visible = 3; // Reduced to ensure no overlap with legend
+    int max_visible = 7; // LVGL card layout
 
     if (up) {
         if (settings_selected > 0) {
@@ -757,10 +777,7 @@ int settings_handle_input(int up, int down, int left, int right, int a, int b, i
     if (left) {
         // Cycle to previous value
         if (settings_selected >= 0 && settings_selected < settings_count) {
-            SettingsOption *option = &settings[settings_selected];
-            option->current_index = (option->current_index - 1 + option->value_count) % option->value_count;
-            strncpy(option->current_value, option->possible_values[option->current_index], MAX_OPTION_VALUE_LEN - 1);
-            option->current_value[MAX_OPTION_VALUE_LEN - 1] = '\0';
+            settings_cycle_option_prev(settings_selected);
         }
         return 1;
     }

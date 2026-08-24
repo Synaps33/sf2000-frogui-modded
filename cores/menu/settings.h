@@ -41,6 +41,9 @@ const SettingsOption* settings_get_option(int index);
 // Set option to next value (cycles through possible values)
 void settings_cycle_option(int index);
 
+// Set option to previous value
+void settings_cycle_option_prev(int index);
+
 // Show settings menu
 void settings_show_menu(void);
 

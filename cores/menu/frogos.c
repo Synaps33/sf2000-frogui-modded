@@ -2043,6 +2043,56 @@ static void render_sections_visibility_menu(void) {
     font_draw_text(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, legend_x, legend_y, legend, COLOR_LEGEND);
 }
 
+static int sett_scroll_frame = 0;
+static int sett_scroll_pos = 0;
+static int sett_scroll_dir = 1;
+static int sett_last_sel = -1;
+
+static void get_scrolling_settings_text_px(const char *text, int max_px, int is_selected,
+                                          int frame_cnt, int scroll_pos, char *out, size_t out_size) {
+    if (!text || !out || out_size == 0) return;
+    int text_w = font_measure_text(text);
+    if (text_w <= max_px) {
+        strncpy(out, text, out_size - 1);
+        out[out_size - 1] = '\0';
+        return;
+    }
+    if (!is_selected) {
+        int len = strlen(text);
+        int fit = len;
+        char temp[128];
+        while (fit > 1) {
+            if (fit >= (int)sizeof(temp) - 3) fit = sizeof(temp) - 4;
+            strncpy(temp, text, fit);
+            temp[fit] = '\0';
+            strcat(temp, "..");
+            if (font_measure_text(temp) <= max_px) break;
+            fit--;
+        }
+        strncpy(out, temp, out_size - 1);
+        out[out_size - 1] = '\0';
+        return;
+    }
+
+    // Selected: animated marquee scrolling
+    int len = strlen(text);
+    int start = (frame_cnt > 35) ? scroll_pos : 0;
+    if (start < 0) start = 0;
+    if (start >= len) start = len - 1;
+
+    int fit = len - start;
+    char temp[128];
+    while (fit > 0) {
+        if (fit >= (int)sizeof(temp) - 1) fit = sizeof(temp) - 2;
+        strncpy(temp, text + start, fit);
+        temp[fit] = '\0';
+        if (font_measure_text(temp) <= max_px) break;
+        fit--;
+    }
+    strncpy(out, temp, out_size - 1);
+    out[out_size - 1] = '\0';
+}
+
 // Render settings menu
 static void render_settings_menu() {
     // If saving, show saving overlay
@@ -2062,54 +2112,88 @@ static void render_settings_menu() {
         return;
     }
 
-    // v22: Check if text background is enabled for settings menu
-    bool use_text_bg = gfx_theme_is_active() && gfx_theme_platform_text_background();
-
-    const char *title_text = show_multicore_opt ? "MULTICORE SETTINGS" : "CORE SETTINGS";
-
-    // Draw title
-    if (use_text_bg) {
-        render_text_pillbox(framebuffer, PADDING, 10, title_text, 0x0000, COLOR_HEADER, 7);
-    } else if (gfx_theme_is_active()) {
-        font_draw_text_outlined(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, 10, title_text, COLOR_HEADER);
-    } else {
-        font_draw_text(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, 10, title_text, COLOR_HEADER);
-    }
-
-    // Draw the label in top-right
-    char entry_label[20];
-    snprintf(entry_label, sizeof(entry_label), "SEL - SWAP");
-    int label_width = font_measure_text(entry_label);
-    int label_x = SCREEN_WIDTH - label_width - 12;  // Right-aligned, just above the legend
-    int label_y = 8;  // Position it slightly below the top edge
-    render_text_pillbox(framebuffer, label_x, label_y, entry_label, COLOR_LEGEND_BG, COLOR_LEGEND, 6);
-
     int settings_count = settings_get_count();
-    int start_y = 40;
     int selected_index = settings_get_selected_index();
     int scroll_offset = settings_get_scroll_offset();
 
-    // Show settings options (two lines per option)
-    // Reserve space for legend at bottom - ensure no overlap
-    int max_visible = 3; // Reduced from 4 to ensure no overlap with legend
+    // Update scrolling marquee state for selected item
+    if (selected_index != sett_last_sel) {
+        sett_last_sel = selected_index;
+        sett_scroll_frame = 0;
+        sett_scroll_pos = 0;
+        sett_scroll_dir = 1;
+    } else {
+        sett_scroll_frame++;
+        if (sett_scroll_frame > 35 && (sett_scroll_frame % 5 == 0)) {
+            const SettingsOption *sel_opt = settings_get_option(selected_index);
+            const char *sel_name = sel_opt ? sel_opt->name : "";
+            int name_len = strlen(sel_name);
+            int fit_chars = name_len;
+            char tmp[128];
+            while (fit_chars > 0) {
+                if (fit_chars >= (int)sizeof(tmp) - 1) fit_chars = sizeof(tmp) - 2;
+                strncpy(tmp, sel_name, fit_chars);
+                tmp[fit_chars] = '\0';
+                if (font_measure_text(tmp) <= 145) break;
+                fit_chars--;
+            }
+            int max_scroll = name_len - fit_chars;
+            if (max_scroll > 0) {
+                sett_scroll_pos += sett_scroll_dir;
+                if (sett_scroll_pos >= max_scroll) {
+                    sett_scroll_dir = -1;
+                    sett_scroll_pos = max_scroll;
+                } else if (sett_scroll_pos <= 0) {
+                    sett_scroll_dir = 1;
+                    sett_scroll_pos = 0;
+                }
+            }
+        }
+    }
+
+    // LVGL Modal Container Dimensions
+    int menu_x = 8;
+    int menu_y = 8;
+    int menu_w = 304;
+    int menu_h = 224;
+
+    // 1. Draw outer frosted container
+    render_rounded_rect(framebuffer, menu_x, menu_y, menu_w, menu_h, 8, 0x10A2);
+    render_rect(framebuffer, menu_x, menu_y, menu_w, menu_h, 0x31A6);
+
+    // 2. Header Bar: Title Badge on left, Item Counter on right
+    const char *title_text = show_multicore_opt ? "MULTICORE SETTINGS" : "CORE SETTINGS";
+    int title_w = font_measure_text(title_text);
+    render_rounded_rect(framebuffer, menu_x + 8, menu_y + 4, title_w + 14, 18, 5, 0x028A);
+    render_rect(framebuffer, menu_x + 8, menu_y + 4, title_w + 14, 18, 0x04DF);
+    font_draw_text(framebuffer, 320, 240, menu_x + 15, menu_y + 5, title_text, 0x07FF);
+
+    char count_str[32];
+    snprintf(count_str, sizeof(count_str), "[ %02d/%02d ]", (settings_count > 0) ? (selected_index + 1) : 0, settings_count);
+    int count_w = font_measure_text(count_str);
+    int count_x = menu_x + menu_w - count_w - 18;
+    render_rounded_rect(framebuffer, count_x, menu_y + 4, count_w + 10, 18, 4, 0x18E3);
+    font_draw_text(framebuffer, 320, 240, count_x + 5, menu_y + 5, count_str, 0xCE79);
+
+    // 3. Option Cards List
+    int start_y = menu_y + 26;
+    int card_x = menu_x + 8;
+    int card_w = menu_w - 24;  // Leaves room for right scrollbar
+    int item_h = 21;
+    int gap = 2;
+    int row_stride = item_h + gap;
+    int badge_w = 114;
+    int badge_x = card_x + card_w - badge_w - 4;
+    int max_label_w = badge_x - card_x - 10;
+    int max_visible = 7;
+
     int drawn_count = 0;
     for (int option_index = scroll_offset; option_index < settings_count && drawn_count < max_visible; option_index++) {
         const SettingsOption *option = settings_get_option(option_index);
         if (!option) continue;
 
-        int y_name = start_y + (drawn_count * ITEM_HEIGHT * 2);
-        int y_value = y_name + ITEM_HEIGHT;
-
-        // Check if this option is selected
+        int y = start_y + drawn_count * row_stride;
         int is_selected = (option_index == selected_index);
-
-        // v33: Draw number in light green, name in white (separate)
-        char number_str[8];
-        snprintf(number_str, sizeof(number_str), "%02d. ", option_index + 1);
-        int number_width = font_measure_text(number_str);
-
-        // v33: Light green for numbers: 0x87E0
-        uint16_t number_color = 0x87E0;
 
         // Format option name for display
         char display_opt_name[64];
@@ -2118,56 +2202,78 @@ static void render_settings_menu() {
         if (strncmp(display_opt_name, "frogui_", 7) == 0) {
             display_opt_name[0] = 'F'; display_opt_name[1] = 'R'; display_opt_name[2] = 'O';
             display_opt_name[3] = 'G'; display_opt_name[4] = 'u'; display_opt_name[5] = 'i';
-        } else if (strncmp(display_opt_name, "sf2000_", 7) != 0 && strncmp(display_opt_name, "FROGui_", 7) != 0) {
-            // Remove 'FROGui_' prefix if the user incorrectly added it for a core setting manually
-            // Wait, if the name starts with "FROGui_" (exactly like that) we can strip it, but it's fine.
         }
 
-        if (use_text_bg) {
-            // With text background, draw combined as pillbox
-            char numbered_name[128];
-            snprintf(numbered_name, sizeof(numbered_name), "%02d. %s", option_index + 1, display_opt_name);
-            render_text_pillbox(framebuffer, PADDING, y_name, numbered_name, 0x0000, COLOR_TEXT, 7);
-        } else if (gfx_theme_is_active()) {
-            font_draw_text_outlined(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, y_name, number_str, number_color);
-            font_draw_text_outlined(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING + number_width, y_name, display_opt_name, COLOR_TEXT);
-        } else {
-            font_draw_text(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, y_name, number_str, number_color);
-            font_draw_text(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING + number_width, y_name, display_opt_name, COLOR_TEXT);
-        }
-
-        // v33: Draw setting value - light blue (0x867F) when selected
-        uint16_t value_color = 0x867F;  // Light blue for selected value
+        // Draw LVGL Row Card
         if (is_selected) {
-            // Format value with arrows: "< current_value >"
-            char value_text[256];
-            snprintf(value_text, sizeof(value_text), "< %s >", option->current_value);
-
-            // Use unified pillbox rendering with gray background (0x4A49)
-            render_text_pillbox(framebuffer, PADDING, y_value, value_text, 0x4A49, value_color, 6);
+            render_rounded_rect(framebuffer, card_x, y, card_w, item_h, 4, 0x0A2D);
+            render_rect(framebuffer, card_x, y, card_w, item_h, 0x04DF);
         } else {
-            if (use_text_bg) {
-                render_text_pillbox(framebuffer, PADDING, y_value, option->current_value, 0x0000, COLOR_TEXT, 7);
-            } else if (gfx_theme_is_active()) {
-                font_draw_text_outlined(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, y_value, option->current_value, COLOR_TEXT);
-            } else {
-                font_draw_text(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, y_value, option->current_value, COLOR_TEXT);
-            }
+            render_rounded_rect(framebuffer, card_x, y, card_w, item_h, 4, 0x18C3);
+            render_rect(framebuffer, card_x, y, card_w, item_h, 0x2124);
         }
+
+        // Draw option label with number & scrolling marquee
+        char numbered_name[128];
+        snprintf(numbered_name, sizeof(numbered_name), "%02d. %s", option_index + 1, display_opt_name);
+        char display_label[128];
+        get_scrolling_settings_text_px(numbered_name, max_label_w, is_selected, sett_scroll_frame, sett_scroll_pos, display_label, sizeof(display_label));
+        uint16_t label_col = is_selected ? 0xFFFF : 0xDEFB;
+        font_draw_text(framebuffer, 320, 240, card_x + 6, y + 3, display_label, label_col);
+
+        // Draw option value inside selector badge
+        if (option->current_value[0]) {
+            uint16_t badge_bg = is_selected ? 0x0110 : 0x0861;
+            uint16_t badge_border = is_selected ? 0x05DF : 0x18C3;
+            render_rounded_rect(framebuffer, badge_x, y + 2, badge_w, item_h - 4, 3, badge_bg);
+            render_rect(framebuffer, badge_x, y + 2, badge_w, item_h - 4, badge_border);
+
+            uint16_t val_col = is_selected ? 0x07FF : 0x8CD1;
+            const char *val_str = option->current_value;
+            if (strcmp(val_str, "YES") == 0 || strcmp(val_str, "enabled") == 0 || strcmp(val_str, "true") == 0) {
+                val_col = 0x07E0;
+            } else if (strcmp(val_str, "NO") == 0 || strcmp(val_str, "disabled") == 0 || strcmp(val_str, "false") == 0) {
+                val_col = is_selected ? 0xF986 : 0xCE79;
+            }
+
+            char formatted_val[128];
+            if (is_selected) {
+                snprintf(formatted_val, sizeof(formatted_val), "< %s >", val_str);
+            } else {
+                snprintf(formatted_val, sizeof(formatted_val), "%s", val_str);
+            }
+
+            char display_val[128];
+            get_scrolling_settings_text_px(formatted_val, badge_w - 8, is_selected, sett_scroll_frame, sett_scroll_pos, display_val, sizeof(display_val));
+            int v_w = font_measure_text(display_val);
+            int v_x = badge_x + (badge_w - v_w) / 2;
+            if (v_x < badge_x + 4) v_x = badge_x + 4;
+            font_draw_text(framebuffer, 320, 240, v_x, y + 3, display_val, val_col);
+        }
+
         drawn_count++;
     }
 
-    // Draw legend with pillbox highlighting
-    const char *legend = " A - SAVE   B - EXIT   Y - RESET ";
-    int legend_y = SCREEN_HEIGHT - 24;
+    // 4. Modern LVGL Vertical Scrollbar Track and Thumb
+    int sb_x = menu_x + menu_w - 11;
+    int sb_y = start_y;
+    int sb_h = max_visible * row_stride - gap;
+    int sb_w = 4;
+    render_rounded_rect(framebuffer, sb_x, sb_y, sb_w, sb_h, 2, 0x18C3);
+    if (settings_count > 0) {
+        int thumb_h = (settings_count <= max_visible) ? sb_h : (sb_h * max_visible / settings_count);
+        if (thumb_h < 14) thumb_h = 14;
+        int max_scroll = settings_count - max_visible;
+        int thumb_y = (max_scroll <= 0) ? sb_y : (sb_y + (sb_h - thumb_h) * scroll_offset / max_scroll);
+        render_rounded_rect(framebuffer, sb_x, thumb_y, sb_w, thumb_h, 2, 0x07E0);
+    }
 
-    // Calculate width and position (right-aligned)
-    int legend_width = font_measure_text(legend);
-    int legend_x = SCREEN_WIDTH - legend_width - 12;
-
-    // Draw legend pill with rounded corners
-    render_rounded_rect(framebuffer, legend_x - 4, legend_y - 2, legend_width + 8, 20, 10, COLOR_LEGEND_BG);
-    font_draw_text(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, legend_x, legend_y, legend, COLOR_LEGEND);
+    // 5. Footer Toolbar with key badges
+    int y_foot = menu_y + menu_h - 22;
+    render_text_pillbox(framebuffer, menu_x + 10, y_foot, "A:SAVE", 0x18E3, 0x07E0, 3);
+    render_text_pillbox(framebuffer, menu_x + 75, y_foot, "< / >:CHANGE", 0x18E3, 0x07FF, 3);
+    render_text_pillbox(framebuffer, menu_x + 180, y_foot, "Y:RESET", 0x18E3, 0xFFE0, 3);
+    render_text_pillbox(framebuffer, menu_x + 245, y_foot, "B:BACK", 0x18E3, 0xF800, 3);
 }
 
 // Render hotkeys screen
