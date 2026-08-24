@@ -143,6 +143,8 @@ int settings_load(void) {
 
 // Load core-specific settings
 int settings_load_core(const char *core_name) {
+    if (!core_name || core_name[0] == '\0') return 0;
+
     char config_path[512];
     char core_name_lower[256];
 
@@ -157,8 +159,8 @@ int settings_load_core(const char *core_name) {
 
     const char *base_dir = get_config_directory();
 
-    // Try lowercase directory name first: /mnt/sda1/configs/{core_lower}/{core}.opt
-    snprintf(config_path, sizeof(config_path), "%s/%s/%s.opt", base_dir, core_name_lower, core_name);
+    // 1. Try: /mnt/sda1/configs/{core}/{core}.opt
+    snprintf(config_path, sizeof(config_path), "%s/%s/%s.opt", base_dir, core_name, core_name);
     FILE *test = fopen(config_path, "r");
     if (test) {
         fclose(test);
@@ -166,10 +168,58 @@ int settings_load_core(const char *core_name) {
         return settings_load_file(config_path, 0);
     }
 
-    // Try capitalized directory name: /mnt/sda1/configs/{core}/{core}.opt
-    snprintf(config_path, sizeof(config_path), "%s/%s/%s.opt", base_dir, core_name, core_name);
-    strncpy(current_config_path, config_path, sizeof(current_config_path) - 1);
-    return settings_load_file(config_path, 0);
+    // 2. Try: /mnt/sda1/configs/{core_lower}/{core}.opt
+    snprintf(config_path, sizeof(config_path), "%s/%s/%s.opt", base_dir, core_name_lower, core_name);
+    test = fopen(config_path, "r");
+    if (test) {
+        fclose(test);
+        strncpy(current_config_path, config_path, sizeof(current_config_path) - 1);
+        return settings_load_file(config_path, 0);
+    }
+
+    // 3. Try: /mnt/sda1/configs/{core_lower}/{core_lower}.opt
+    snprintf(config_path, sizeof(config_path), "%s/%s/%s.opt", base_dir, core_name_lower, core_name_lower);
+    test = fopen(config_path, "r");
+    if (test) {
+        fclose(test);
+        strncpy(current_config_path, config_path, sizeof(current_config_path) - 1);
+        return settings_load_file(config_path, 0);
+    }
+
+    // 4. Try: /mnt/sda1/configs/{core}/{core_lower}.opt
+    snprintf(config_path, sizeof(config_path), "%s/%s/%s.opt", base_dir, core_name, core_name_lower);
+    test = fopen(config_path, "r");
+    if (test) {
+        fclose(test);
+        strncpy(current_config_path, config_path, sizeof(current_config_path) - 1);
+        return settings_load_file(config_path, 0);
+    }
+
+    // 5. Try scanning /mnt/sda1/configs/{core}/ or {core_lower}/ for any .opt file
+    char dir_path[512];
+    const char *dirs_to_try[2] = {core_name, core_name_lower};
+    for (int d = 0; d < 2; d++) {
+        if (d == 1 && strcmp(dirs_to_try[0], dirs_to_try[1]) == 0) continue;
+        snprintf(dir_path, sizeof(dir_path), "%s/%s", base_dir, dirs_to_try[d]);
+        DIR *dp = opendir(dir_path);
+        if (dp) {
+            struct dirent *ep;
+            while ((ep = readdir(dp)) != NULL) {
+                if (ep->d_name[0] == '.') continue;
+                size_t nlen = strlen(ep->d_name);
+                if (nlen > 4 && strcmp(ep->d_name + nlen - 4, ".opt") == 0 &&
+                    strstr(ep->d_name, "_display.opt") == NULL) {
+                    snprintf(config_path, sizeof(config_path), "%s/%s", dir_path, ep->d_name);
+                    closedir(dp);
+                    strncpy(current_config_path, config_path, sizeof(current_config_path) - 1);
+                    return settings_load_file(config_path, 0);
+                }
+            }
+            closedir(dp);
+        }
+    }
+
+    return 0;
 }
 
 // Helper to add default settings if missing from config file

@@ -256,6 +256,15 @@ void display_opts_show_menu(const char *folder_name) {
         core_settings_loaded = 0;
     }
 
+    // If core settings not loaded by mapped name, try folder name directly
+    if (!core_settings_loaded && folder_name && folder_name[0] != '\0') {
+        core_settings_loaded = settings_load_core(folder_name);
+        if (core_settings_loaded) {
+            strncpy(current_core_name, folder_name, sizeof(current_core_name) - 1);
+            current_core_name[sizeof(current_core_name) - 1] = '\0';
+        }
+    }
+
     // Calculate total menu items
     total_menu_items = DISPLAY_OPTS_ITEMS;
     if (core_settings_loaded) {

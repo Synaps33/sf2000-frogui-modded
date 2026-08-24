@@ -1,0 +1,17 @@
+### [openlara_draw_distance] :[Short] :[Short|Very Short|Ultra Short|Extreme|Medium|Default|Long]
+openlara_draw_distance = "Short"
+
+### [openlara_resolution] :[50%] :[50%|75%|100%|25%]
+openlara_resolution = "50%"
+
+### [openlara_framerate] :[30 FPS] :[30 FPS|15 FPS (Frameskip)]
+openlara_framerate = "30 FPS"
+
+### [openlara_dither] :[Disabled] :[Disabled|Enabled]
+openlara_dither = "Disabled"
+
+### [openlara_audio] :[Enabled] :[Enabled|Disabled]
+openlara_audio = "Enabled"
+
+### [openlara_controls] :[Classic] :[Classic|Modern]
+openlara_controls = "Classic"

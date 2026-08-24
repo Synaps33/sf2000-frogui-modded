@@ -1,0 +1,8 @@
+### [duke3d_resolution] :[320x240] :[320x240|320x200]
+duke3d_resolution = "320x240"
+
+### [duke3d_controls] :[Modern] :[Modern|Classic]
+duke3d_controls = "Modern"
+
+### [duke3d_crosshair] :[Off] :[Off|On]
+duke3d_crosshair = "Off"
