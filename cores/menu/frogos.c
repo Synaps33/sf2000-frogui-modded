@@ -2044,12 +2044,10 @@ static void render_sections_visibility_menu(void) {
 }
 
 static int sett_scroll_frame = 0;
-static int sett_scroll_pos = 0;
-static int sett_scroll_dir = 1;
 static int sett_last_sel = -1;
 
 static void get_scrolling_settings_text_px(const char *text, int max_px, int is_selected,
-                                          int frame_cnt, int scroll_pos, char *out, size_t out_size) {
+                                          int frame_cnt, char *out, size_t out_size) {
     if (!text || !out || out_size == 0) return;
     int text_w = font_measure_text(text);
     if (text_w <= max_px) {
@@ -2074,11 +2072,39 @@ static void get_scrolling_settings_text_px(const char *text, int max_px, int is_
         return;
     }
 
-    // Selected: animated marquee scrolling
+    // Selected: calculate exact max_scroll where the end of the text is fully visible
     int len = strlen(text);
-    int start = (frame_cnt > 35) ? scroll_pos : 0;
+    int max_scroll = 0;
+    while (max_scroll < len && font_measure_text(text + max_scroll) > max_px) {
+        max_scroll++;
+    }
+
+    if (max_scroll <= 0) {
+        strncpy(out, text, out_size - 1);
+        out[out_size - 1] = '\0';
+        return;
+    }
+
+    int pause_start = 35; // ~0.6s
+    int step_frames = 5;  // scroll speed (~12 chars/sec)
+    int pause_end = 30;   // ~0.5s pause at end so user can read complete name
+    int scroll_time = max_scroll * step_frames;
+    int cycle_time = pause_start + scroll_time + pause_end + scroll_time;
+
+    int t = frame_cnt % cycle_time;
+    int start = 0;
+    if (t < pause_start) {
+        start = 0;
+    } else if (t < pause_start + scroll_time) {
+        start = (t - pause_start) / step_frames;
+    } else if (t < pause_start + scroll_time + pause_end) {
+        start = max_scroll;
+    } else {
+        start = max_scroll - ((t - (pause_start + scroll_time + pause_end)) / step_frames);
+    }
+
     if (start < 0) start = 0;
-    if (start >= len) start = len - 1;
+    if (start > max_scroll) start = max_scroll;
 
     int fit = len - start;
     char temp[128];
@@ -2116,39 +2142,12 @@ static void render_settings_menu() {
     int selected_index = settings_get_selected_index();
     int scroll_offset = settings_get_scroll_offset();
 
-    // Update scrolling marquee state for selected item
+    // Update scrolling marquee frame counter for selected item
     if (selected_index != sett_last_sel) {
         sett_last_sel = selected_index;
         sett_scroll_frame = 0;
-        sett_scroll_pos = 0;
-        sett_scroll_dir = 1;
     } else {
         sett_scroll_frame++;
-        if (sett_scroll_frame > 35 && (sett_scroll_frame % 5 == 0)) {
-            const SettingsOption *sel_opt = settings_get_option(selected_index);
-            const char *sel_name = sel_opt ? sel_opt->name : "";
-            int name_len = strlen(sel_name);
-            int fit_chars = name_len;
-            char tmp[128];
-            while (fit_chars > 0) {
-                if (fit_chars >= (int)sizeof(tmp) - 1) fit_chars = sizeof(tmp) - 2;
-                strncpy(tmp, sel_name, fit_chars);
-                tmp[fit_chars] = '\0';
-                if (font_measure_text(tmp) <= 145) break;
-                fit_chars--;
-            }
-            int max_scroll = name_len - fit_chars;
-            if (max_scroll > 0) {
-                sett_scroll_pos += sett_scroll_dir;
-                if (sett_scroll_pos >= max_scroll) {
-                    sett_scroll_dir = -1;
-                    sett_scroll_pos = max_scroll;
-                } else if (sett_scroll_pos <= 0) {
-                    sett_scroll_dir = 1;
-                    sett_scroll_pos = 0;
-                }
-            }
-        }
     }
 
     // LVGL Modal Container Dimensions
@@ -2217,7 +2216,7 @@ static void render_settings_menu() {
         char numbered_name[128];
         snprintf(numbered_name, sizeof(numbered_name), "%02d. %s", option_index + 1, display_opt_name);
         char display_label[128];
-        get_scrolling_settings_text_px(numbered_name, max_label_w, is_selected, sett_scroll_frame, sett_scroll_pos, display_label, sizeof(display_label));
+        get_scrolling_settings_text_px(numbered_name, max_label_w, is_selected, sett_scroll_frame, display_label, sizeof(display_label));
         uint16_t label_col = is_selected ? 0xFFFF : 0xDEFB;
         font_draw_text(framebuffer, 320, 240, card_x + 6, y + 3, display_label, label_col);
 
@@ -2244,7 +2243,7 @@ static void render_settings_menu() {
             }
 
             char display_val[128];
-            get_scrolling_settings_text_px(formatted_val, badge_w - 8, is_selected, sett_scroll_frame, sett_scroll_pos, display_val, sizeof(display_val));
+            get_scrolling_settings_text_px(formatted_val, badge_w - 8, is_selected, sett_scroll_frame, display_val, sizeof(display_val));
             int v_w = font_measure_text(display_val);
             int v_x = badge_x + (badge_w - v_w) / 2;
             if (v_x < badge_x + 4) v_x = badge_x + 4;
