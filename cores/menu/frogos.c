@@ -2326,6 +2326,14 @@ static void render_credits_screen() {
     font_draw_text(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, start_y + line_height * 2, section2, COLOR_BG);
 
     font_draw_text(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, start_y + line_height * 3, "Q_ta & THE_Q_DEV", COLOR_TEXT);
+
+    // Modded Fork section
+    const char *section3 = " Modded Fork v80 ";
+    int section3_width = font_measure_text(section3);
+    render_rounded_rect(framebuffer, PADDING - 4, start_y + line_height * 4 - 2, section3_width + 8, 20, 10, COLOR_HEADER);
+    font_draw_text(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, start_y + line_height * 4, section3, COLOR_BG);
+
+    font_draw_text(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, start_y + line_height * 5, "Synaps33", COLOR_TEXT);
     
     // Draw legend
     const char *legend = " B - BACK ";
@@ -4418,7 +4426,7 @@ void retro_set_controller_port_device(unsigned port, unsigned device) {
 void retro_get_system_info(struct retro_system_info *info) {
     memset(info, 0, sizeof(*info));
     info->library_name     = "FrogUI";
-    info->library_version  = "0.1";
+    info->library_version  = "v80";
     info->need_fullpath    = false;
     info->valid_extensions = "frogui";
 }

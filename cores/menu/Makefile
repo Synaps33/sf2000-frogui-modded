@@ -52,7 +52,7 @@ endif
 
 LDFLAGS += $(LIBM)
 
-# Source files - main menu (v79: filemanager, calculator added)
+# Source files - main menu (v80: marquee scroll fix, LVGL cards, 2D grid, XMB waves)
 SOURCES_C := frogos.c font.c render.c recent_games.c settings.c theme.c favorites.c gfx_theme.c lodepng.c avi_bg.c display_opts.c osk.c text_editor.c stb_image_jpeg.c gifdec.c simplewebp_impl.c video_browser.c video_player.c music_player.c image_viewer.c filemanager.c calculator.c
 
 # libmad sources (MP3 decoder for video player audio)

@@ -1,7 +1,14 @@
-# FrogUI - Modded Fork (SF2000 & GB300)
+# FrogUI - Modded Fork v80 (SF2000 & GB300)
 
 Custom firmware UI & Menu for **Data Frog SF2000** and **GB300** retro handheld consoles.
 Forked from [angree/sf2000-frogui-modded](https://github.com/angree/sf2000-frogui-modded).
+
+### 🚀 What's New in v80:
+- **Marquee text scrolling fix**: Long names in Settings and Options menus now scroll fully to the very end with smooth pauses at start (~0.6s) and end (~0.5s).
+- **LVGL-style Card Options**: Redesigned settings and per-core options menus with modern card layout, selector badges, and real-time vertical scrollbar.
+- **2D Grid Layout**: Support for 2-column and 3-column grid layouts in ROM lists with configurable theme spacing.
+- **Per-core settings enhancement**: Fixed options loading and full console-to-core mappings documentation.
+- **XMB Waves**: 60 FPS real-time animated waves generator.
 
 ---
 
