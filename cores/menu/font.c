@@ -444,9 +444,9 @@ void font_draw_text_marquee(uint16_t *framebuffer, int screen_width, int screen_
     int max_scroll_px = (text_w - clip_w) + 6;
     if (max_scroll_px < 1) max_scroll_px = 1;
 
-    int pause_start = 45; // ~0.75s pause at start (at 60fps)
+    int pause_start = 22; // ~0.37s pause at start (at 60fps)
     int scroll_time = max_scroll_px; // 1 pixel per frame forward
-    int pause_end = 45;   // ~0.75s pause at end
+    int pause_end = 22;   // ~0.37s pause at end
     int cycle_time = pause_start + scroll_time + pause_end + scroll_time;
     if (cycle_time <= 0) cycle_time = 1;
 
