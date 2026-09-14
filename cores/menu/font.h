@@ -26,6 +26,19 @@ void font_draw_char(uint16_t *framebuffer, int screen_width, int screen_height,
 void font_draw_text(uint16_t *framebuffer, int screen_width, int screen_height,
                    int x, int y, const char *text, uint16_t color);
 
+// Draw a text string clipped to a bounding box [clip_x, clip_y, clip_w, clip_h]
+void font_draw_text_clipped(uint16_t *framebuffer, int screen_width, int screen_height,
+                           int clip_x, int clip_y, int clip_w, int clip_h,
+                           int x, int y, const char *text, uint16_t color);
+
+// Draw text with smooth pixel marquee scrolling inside bounding box [clip_x, clip_y, clip_w, clip_h]
+// If text fits or is not selected, renders statically (truncated with ".." if unselected and too long).
+// If center_if_fits is non-zero, horizontally centers text when it fits within clip_w.
+void font_draw_text_marquee(uint16_t *framebuffer, int screen_width, int screen_height,
+                            int clip_x, int clip_y, int clip_w, int clip_h,
+                            int text_y, const char *text, uint16_t color,
+                            int is_selected, int frame_cnt, int center_if_fits);
+
 // Measure text width in pixels
 int font_measure_text(const char *text);
 

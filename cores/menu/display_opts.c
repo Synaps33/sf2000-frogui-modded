@@ -37,79 +37,6 @@ static int rescan_needed = 0;  // v31: Flag to tell caller to rescan directory a
 static int disp_scroll_frame = 0;
 static int disp_last_sel = -1;
 
-static void get_scrolling_option_text_px(const char *text, int max_px, int is_selected,
-                                        int frame_cnt, char *out, size_t out_size) {
-    if (!text || !out || out_size == 0) return;
-    int text_w = font_measure_text(text);
-    if (text_w <= max_px) {
-        strncpy(out, text, out_size - 1);
-        out[out_size - 1] = '\0';
-        return;
-    }
-    if (!is_selected) {
-        int len = strlen(text);
-        int fit = len;
-        char temp[128];
-        while (fit > 1) {
-            if (fit >= (int)sizeof(temp) - 3) fit = sizeof(temp) - 4;
-            strncpy(temp, text, fit);
-            temp[fit] = '\0';
-            strcat(temp, "..");
-            if (font_measure_text(temp) <= max_px) break;
-            fit--;
-        }
-        strncpy(out, temp, out_size - 1);
-        out[out_size - 1] = '\0';
-        return;
-    }
-
-    // Selected: calculate exact max_scroll where the end of the text is fully visible
-    int len = strlen(text);
-    int max_scroll = 0;
-    while (max_scroll < len && font_measure_text(text + max_scroll) > max_px) {
-        max_scroll++;
-    }
-
-    if (max_scroll <= 0) {
-        strncpy(out, text, out_size - 1);
-        out[out_size - 1] = '\0';
-        return;
-    }
-
-    int pause_start = 35; // ~0.6s
-    int step_frames = 5;  // scroll speed (~12 chars/sec)
-    int pause_end = 30;   // ~0.5s pause at end so user can read complete name
-    int scroll_time = max_scroll * step_frames;
-    int cycle_time = pause_start + scroll_time + pause_end + scroll_time;
-
-    int t = frame_cnt % cycle_time;
-    int start = 0;
-    if (t < pause_start) {
-        start = 0;
-    } else if (t < pause_start + scroll_time) {
-        start = (t - pause_start) / step_frames;
-    } else if (t < pause_start + scroll_time + pause_end) {
-        start = max_scroll;
-    } else {
-        start = max_scroll - ((t - (pause_start + scroll_time + pause_end)) / step_frames);
-    }
-
-    if (start < 0) start = 0;
-    if (start > max_scroll) start = max_scroll;
-
-    int fit = len - start;
-    char temp[128];
-    while (fit > 0) {
-        if (fit >= (int)sizeof(temp) - 1) fit = sizeof(temp) - 2;
-        strncpy(temp, text + start, fit);
-        temp[fit] = '\0';
-        if (font_measure_text(temp) <= max_px) break;
-        fit--;
-    }
-    strncpy(out, temp, out_size - 1);
-    out[out_size - 1] = '\0';
-}
-
 void display_opts_init(void) {
     memset(&current_opts, 0, sizeof(current_opts));
     current_opts.mode = DISPLAY_FILES_AND_DIRS;
@@ -635,11 +562,9 @@ void display_opts_render(uint16_t *framebuffer) {
             render_rect(framebuffer, card_x, y, card_w, item_h, 0x2124);
         }
 
-        // Draw option label with scrolling marquee if selected and long
-        char display_label[128];
-        get_scrolling_option_text_px(label, max_label_w, is_selected, disp_scroll_frame, display_label, sizeof(display_label));
+        // Draw option label with smooth marquee if selected and long
         uint16_t label_col = pattern_disabled ? 0x632C : (is_selected ? 0xFFFF : 0xDEFB);
-        font_draw_text(framebuffer, 320, 240, card_x + 6, y + 3, display_label, label_col);
+        font_draw_text_marquee(framebuffer, 320, 240, card_x + 6, y, max_label_w, item_h, y + 3, label, label_col, is_selected, disp_scroll_frame, 0);
 
         // Draw option value inside selector badge
         if (value[0]) {
@@ -662,12 +587,7 @@ void display_opts_render(uint16_t *framebuffer) {
                 snprintf(formatted_val, sizeof(formatted_val), "%s", value);
             }
 
-            char display_val[128];
-            get_scrolling_option_text_px(formatted_val, badge_w - 8, is_selected, disp_scroll_frame, display_val, sizeof(display_val));
-            int v_w = font_measure_text(display_val);
-            int v_x = badge_x + (badge_w - v_w) / 2;
-            if (v_x < badge_x + 4) v_x = badge_x + 4;
-            font_draw_text(framebuffer, 320, 240, v_x, y + 3, display_val, val_col);
+            font_draw_text_marquee(framebuffer, 320, 240, badge_x + 4, y + 2, badge_w - 8, item_h - 4, y + 3, formatted_val, val_col, is_selected, disp_scroll_frame, 1);
         }
     }
 

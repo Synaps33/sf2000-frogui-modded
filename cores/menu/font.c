@@ -316,6 +316,162 @@ void font_draw_text(uint16_t *framebuffer, int screen_width, int screen_height,
     }
 }
 
+void font_draw_text_clipped(uint16_t *framebuffer, int screen_width, int screen_height,
+                           int clip_x, int clip_y, int clip_w, int clip_h,
+                           int x, int y, const char *text, uint16_t color) {
+    if (!font_loaded || !framebuffer || !text || !glyph_cache_initialized) return;
+
+    if (clip_x < 0) { clip_w += clip_x; clip_x = 0; }
+    if (clip_y < 0) { clip_h += clip_y; clip_y = 0; }
+    if (clip_x + clip_w > screen_width) clip_w = screen_width - clip_x;
+    if (clip_y + clip_h > screen_height) clip_h = screen_height - clip_y;
+    if (clip_w <= 0 || clip_h <= 0) return;
+
+    int clip_right = clip_x + clip_w;
+    int clip_bottom = clip_y + clip_h;
+
+    uint8_t fg_r = (color >> 11) & 0x1F;
+    uint8_t fg_g = (color >> 5) & 0x3F;
+    uint8_t fg_b = color & 0x1F;
+    int baseline = font_baseline_fp;
+
+    int cur_x = x;
+    int start_x = x;
+
+    while (*text) {
+        if (*text == '\n') {
+            y += FONT_SIZE + 4;
+            cur_x = start_x;
+            text++;
+            continue;
+        }
+
+        // Stop if subsequent glyphs will be well past the right clip edge
+        if (cur_x >= clip_right + 32) break;
+
+        char c = *text;
+        GlyphCacheEntry *entry = get_cached_glyph(c);
+        int advance = 0;
+
+        if (entry && entry->glyph_index != 0) {
+            advance = entry->advance_width_fp + font_extra_spacing;
+
+            // Only render glyph pixels if within horizontal bounds
+            int glyph_min_x = cur_x + entry->bm_xoff;
+            int glyph_max_x = glyph_min_x + entry->bm_width;
+            if (glyph_max_x > clip_x && glyph_min_x < clip_right && entry->bitmap) {
+                unsigned char *bitmap = entry->bitmap;
+                int width = entry->bm_width;
+                int height = entry->bm_height;
+                int xoff = entry->bm_xoff;
+                int yoff = entry->bm_yoff;
+
+                for (int row = 0; row < height; row++) {
+                    int py = y + baseline + yoff + row + font_y_offset;
+                    if (py < clip_y || py >= clip_bottom) continue;
+
+                    for (int col = 0; col < width; col++) {
+                        unsigned char alpha = bitmap[row * width + col];
+                        if (alpha > 0) {
+                            int px = cur_x + xoff + col;
+                            if (px >= clip_x && px < clip_right) {
+                                int idx = py * screen_width + px;
+                                if (font_smooth && alpha < 250) {
+                                    uint16_t bg = framebuffer[idx];
+                                    uint8_t bg_r = (bg >> 11) & 0x1F;
+                                    uint8_t bg_g = (bg >> 5) & 0x3F;
+                                    uint8_t bg_b = bg & 0x1F;
+
+                                    uint8_t r = bg_r + (((fg_r - bg_r) * alpha) >> 8);
+                                    uint8_t g = bg_g + (((fg_g - bg_g) * alpha) >> 8);
+                                    uint8_t b = bg_b + (((fg_b - bg_b) * alpha) >> 8);
+
+                                    framebuffer[idx] = (r << 11) | (g << 5) | b;
+                                } else if (alpha > 127) {
+                                    framebuffer[idx] = color;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            cur_x += advance;
+        } else {
+            cur_x += FONT_CHAR_SPACING + font_extra_spacing;
+        }
+        text++;
+    }
+}
+
+void font_draw_text_marquee(uint16_t *framebuffer, int screen_width, int screen_height,
+                            int clip_x, int clip_y, int clip_w, int clip_h,
+                            int text_y, const char *text, uint16_t color,
+                            int is_selected, int frame_cnt, int center_if_fits) {
+    if (!framebuffer || !text) return;
+
+    int text_w = font_measure_text(text);
+
+    // If text fits in the bounding box, draw statically
+    if (text_w <= clip_w) {
+        int x = center_if_fits ? (clip_x + (clip_w - text_w) / 2) : clip_x;
+        if (x < clip_x) x = clip_x;
+        font_draw_text(framebuffer, screen_width, screen_height, x, text_y, text, color);
+        return;
+    }
+
+    // Text exceeds clip width:
+    // If not selected, truncate with ".."
+    if (!is_selected) {
+        int len = strlen(text);
+        int fit = len;
+        char temp[128];
+        if (fit >= (int)sizeof(temp) - 3) fit = sizeof(temp) - 4;
+        while (fit > 1) {
+            strncpy(temp, text, fit);
+            temp[fit] = '\0';
+            strcat(temp, "..");
+            if (font_measure_text(temp) <= clip_w) break;
+            fit--;
+        }
+        int tw = font_measure_text(temp);
+        int x = center_if_fits ? (clip_x + (clip_w - tw) / 2) : clip_x;
+        if (x < clip_x) x = clip_x;
+        font_draw_text(framebuffer, screen_width, screen_height, x, text_y, temp, color);
+        return;
+    }
+
+    // Selected item: smooth pixel-by-pixel marquee scrolling
+    int max_scroll_px = (text_w - clip_w) + 6;
+    if (max_scroll_px < 1) max_scroll_px = 1;
+
+    int pause_start = 45; // ~0.75s pause at start (at 60fps)
+    int scroll_time = max_scroll_px; // 1 pixel per frame forward
+    int pause_end = 45;   // ~0.75s pause at end
+    int cycle_time = pause_start + scroll_time + pause_end + scroll_time;
+    if (cycle_time <= 0) cycle_time = 1;
+
+    if (frame_cnt < 0) frame_cnt = 0;
+    int t = frame_cnt % cycle_time;
+    int offset_px = 0;
+
+    if (t < pause_start) {
+        offset_px = 0;
+    } else if (t < pause_start + scroll_time) {
+        offset_px = t - pause_start;
+    } else if (t < pause_start + scroll_time + pause_end) {
+        offset_px = max_scroll_px;
+    } else {
+        offset_px = max_scroll_px - (t - (pause_start + scroll_time + pause_end));
+    }
+
+    if (offset_px < 0) offset_px = 0;
+    if (offset_px > max_scroll_px) offset_px = max_scroll_px;
+
+    font_draw_text_clipped(framebuffer, screen_width, screen_height,
+                           clip_x, clip_y, clip_w, clip_h,
+                           clip_x - offset_px, text_y, text, color);
+}
+
 int font_measure_text(const char *text) {
     if (!text || !font_loaded || !glyph_cache_initialized) return 0;
 
