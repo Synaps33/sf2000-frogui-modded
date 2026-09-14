@@ -29,6 +29,7 @@ static uint8_t universal_buffer[UNIVERSAL_BUFFER_BYTES];
 
 // Track if we're in platform menu or game list
 static bool in_platform_menu = true;
+static bool vlist_fullscreen_art_active = false;
 
 void render_set_in_platform_menu(bool is_platform_menu) {
     in_platform_menu = is_platform_menu;
@@ -36,6 +37,14 @@ void render_set_in_platform_menu(bool is_platform_menu) {
 
 bool render_is_in_platform_menu(void) {
     return in_platform_menu;
+}
+
+void render_set_vlist_fullscreen_art(bool active) {
+    vlist_fullscreen_art_active = active;
+}
+
+bool render_get_vlist_fullscreen_art(void) {
+    return vlist_fullscreen_art_active;
 }
 
 // Draw text with drop shadow (for GFX themes) - OPTIMIZED: only 2 draws instead of 9
@@ -916,13 +925,42 @@ void render_menu_item(uint16_t *framebuffer, int index, const char *name, const 
     if (hide_system_name) return;
 
     if (is_selected) {
-        const char *use_pillbox = settings_get_value("frogui_list_pillbox");
-        if (use_pillbox && strcmp(use_pillbox, "true") == 0) {
-            // Use unified pillbox rendering with gray background (RGB565: 0x4A49 - approx RGB 74,73,74)
-            render_text_pillbox(framebuffer, text_x, y, name, 0x4A49, 0xFFFF, 7);
+        if (vlist_fullscreen_art_active && !is_horizontal && cols == 1 && !in_platform_menu) {
+            // Fullscreen art vertical list: high contrast bright white text with clean shadow
+            font_draw_text_outlined(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, text_x, y, name, 0xFFFF);
         } else {
-            // Traditional highlighted text
-            uint16_t text_color = COLOR_SELECT_TEXT;
+            const char *use_pillbox = settings_get_value("frogui_list_pillbox");
+            if (use_pillbox && strcmp(use_pillbox, "true") == 0) {
+                // Use unified pillbox rendering with gray background (RGB565: 0x4A49 - approx RGB 74,73,74)
+                render_text_pillbox(framebuffer, text_x, y, name, 0x4A49, 0xFFFF, 7);
+            } else {
+                // Traditional highlighted text
+                uint16_t text_color = COLOR_SELECT_TEXT;
+                bool use_text_bg = false;
+                if (gfx_theme_is_active()) {
+                    if (in_platform_menu) {
+                        use_text_bg = gfx_theme_platform_text_background();
+                    } else {
+                        use_text_bg = gfx_theme_game_text_background();
+                    }
+                }
+                if (use_text_bg) {
+                    render_text_pillbox(framebuffer, text_x, y, name, 0x0000, text_color, 7);
+                } else if (use_outline) {
+                    font_draw_text_outlined(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, text_x, y, name, text_color);
+                } else {
+                    font_draw_text(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, text_x, y, name, text_color);
+                }
+            }
+        }
+    } else {
+        if (vlist_fullscreen_art_active && !is_horizontal && cols == 1 && !in_platform_menu) {
+            // Fullscreen art vertical list: dimmed/muted white text with outline
+            uint16_t text_color = is_dir ? COLOR_FOLDER : 0xCE79;
+            font_draw_text_outlined(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, text_x, y, name, text_color);
+        } else {
+            uint16_t text_color = is_dir ? COLOR_FOLDER : COLOR_TEXT;
+
             bool use_text_bg = false;
             if (gfx_theme_is_active()) {
                 if (in_platform_menu) {
@@ -931,6 +969,7 @@ void render_menu_item(uint16_t *framebuffer, int index, const char *name, const 
                     use_text_bg = gfx_theme_game_text_background();
                 }
             }
+
             if (use_text_bg) {
                 render_text_pillbox(framebuffer, text_x, y, name, 0x0000, text_color, 7);
             } else if (use_outline) {
@@ -938,25 +977,6 @@ void render_menu_item(uint16_t *framebuffer, int index, const char *name, const 
             } else {
                 font_draw_text(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, text_x, y, name, text_color);
             }
-        }
-    } else {
-        uint16_t text_color = is_dir ? COLOR_FOLDER : COLOR_TEXT;
-
-        bool use_text_bg = false;
-        if (gfx_theme_is_active()) {
-            if (in_platform_menu) {
-                use_text_bg = gfx_theme_platform_text_background();
-            } else {
-                use_text_bg = gfx_theme_game_text_background();
-            }
-        }
-
-        if (use_text_bg) {
-            render_text_pillbox(framebuffer, text_x, y, name, 0x0000, text_color, 7);
-        } else if (use_outline) {
-            font_draw_text_outlined(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, text_x, y, name, text_color);
-        } else {
-            font_draw_text(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, text_x, y, name, text_color);
         }
     }
 }
@@ -1025,6 +1045,28 @@ int load_thumbnail(const char *rgb565_path, Thumbnail *thumb) {
 
     xlog("THUMB: input=%s\n", rgb565_path);
 
+    // Build .res folder base path (remove .rgb565 extension)
+    char res_base[512];
+    strncpy(res_base, rgb565_path, sizeof(res_base) - 1);
+    res_base[sizeof(res_base) - 1] = '\0';
+    size_t res_len = strlen(res_base);
+    if (res_len > 7 && strcmp(res_base + res_len - 7, ".rgb565") == 0) {
+        res_base[res_len - 7] = '\0';
+    }
+
+    // Try -bg.rgb565 and _bg.rgb565 variants
+    char bg_try[520];
+    snprintf(bg_try, sizeof(bg_try), "%s-bg.rgb565", res_base);
+    if (load_raw_rgb565(bg_try, thumb)) {
+        xlog("THUMB: -bg.rgb565 OK\n");
+        return 1;
+    }
+    snprintf(bg_try, sizeof(bg_try), "%s_bg.rgb565", res_base);
+    if (load_raw_rgb565(bg_try, thumb)) {
+        xlog("THUMB: _bg.rgb565 OK\n");
+        return 1;
+    }
+
     // 1. Try raw RGB565 from .res folder
     if (load_raw_rgb565(rgb565_path, thumb)) {
         xlog("THUMB: rgb565 OK\n");
@@ -1035,15 +1077,6 @@ int load_thumbnail(const char *rgb565_path, Thumbnail *thumb) {
     uint16_t *loaded_data = NULL;
     int w = 0, h = 0;
     char try_path[520];
-
-    // Build .res folder base path (remove .rgb565 extension)
-    char res_base[512];
-    strncpy(res_base, rgb565_path, sizeof(res_base) - 1);
-    res_base[sizeof(res_base) - 1] = '\0';
-    size_t res_len = strlen(res_base);
-    if (res_len > 7 && strcmp(res_base + res_len - 7, ".rgb565") == 0) {
-        res_base[res_len - 7] = '\0';
-    }
 
     // v72: 2. Try other formats in .res folder (PNG, JPG, WebP, BMP, GIF)
     snprintf(try_path, sizeof(try_path), "%s.png", res_base);
@@ -1334,6 +1367,149 @@ void render_thumbnail(uint16_t *framebuffer, const Thumbnail *thumb) {
                 }
             }
         }
+    }
+}
+
+void render_thumbnail_fullscreen(uint16_t *framebuffer, const Thumbnail *thumb) {
+    if (!framebuffer || !thumb || !thumb->data) return;
+
+    int src_w = thumb->width;
+    int src_h = thumb->height;
+    if (src_w <= 0 || src_h <= 0) return;
+
+    // Check if thumbnail changed to trigger smooth cross-fade transition
+    if (thumb->data != last_thumb_data) {
+        if (last_thumb_data != NULL) {
+            thumb_fade_step = 0;
+        } else {
+            thumb_fade_step = 255;
+        }
+        last_thumb_data = thumb->data;
+    }
+
+    if (thumb_fade_step < 255) {
+        thumb_fade_step += 32;
+        if (thumb_fade_step > 255) thumb_fade_step = 255;
+    }
+
+    // Direct blit if already 320x240 and no fade
+    if (src_w == SCREEN_WIDTH && src_h == SCREEN_HEIGHT && thumb_fade_step == 255) {
+        memcpy(framebuffer, thumb->data, SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(uint16_t));
+        return;
+    }
+
+    // Fixed-point scaling (nearest-neighbor for maximum speed at 60fps)
+    int step_x = (src_w << 16) / SCREEN_WIDTH;
+    int step_y = (src_h << 16) / SCREEN_HEIGHT;
+    int src_y = 0;
+
+    for (int y = 0; y < SCREEN_HEIGHT; y++) {
+        int sy = src_y >> 16;
+        if (sy >= src_h) sy = src_h - 1;
+        const uint16_t *src_row = thumb->data + sy * src_w;
+        uint16_t *dst_row = framebuffer + y * SCREEN_WIDTH;
+        int src_x = 0;
+
+        if (thumb_fade_step == 255) {
+            for (int x = 0; x < SCREEN_WIDTH; x++) {
+                dst_row[x] = src_row[src_x >> 16];
+                src_x += step_x;
+            }
+        } else {
+            for (int x = 0; x < SCREEN_WIDTH; x++) {
+                uint16_t pixel = src_row[src_x >> 16];
+                uint16_t old_pix = dst_row[x];
+                int r_old = (old_pix >> 11) & 0x1F, g_old = (old_pix >> 5) & 0x3F, b_old = old_pix & 0x1F;
+                int r = (pixel >> 11) & 0x1F, g = (pixel >> 5) & 0x3F, b = pixel & 0x1F;
+                int r_blend = (r_old * (255 - thumb_fade_step) + r * thumb_fade_step) >> 8;
+                int g_blend = (g_old * (255 - thumb_fade_step) + g * thumb_fade_step) >> 8;
+                int b_blend = (b_old * (255 - thumb_fade_step) + b * thumb_fade_step) >> 8;
+                dst_row[x] = (r_blend << 11) | (g_blend << 5) | b_blend;
+                src_x += step_x;
+            }
+        }
+        src_y += step_y;
+    }
+}
+
+void render_apply_horizontal_gradient(uint16_t *framebuffer, int grad_width) {
+    if (!framebuffer) return;
+    if (grad_width <= 0) return;
+    if (grad_width > SCREEN_WIDTH) grad_width = SCREEN_WIDTH;
+
+    // Precompute smooth scale factors across width
+    // x=0 is completely black (factor=0), blending smoothly to factor=256 at grad_width
+    uint16_t factors[SCREEN_WIDTH];
+    for (int x = 0; x < grad_width; x++) {
+        int f = (x * 256) / grad_width;
+        // Ease curve: slightly darker near the left edge for optimal text contrast
+        f = (f * f) >> 8;
+        if (f < 0) f = 0;
+        if (f > 256) f = 256;
+        factors[x] = (uint16_t)f;
+    }
+
+    for (int y = 0; y < SCREEN_HEIGHT; y++) {
+        uint16_t *row = framebuffer + y * SCREEN_WIDTH;
+        for (int x = 0; x < grad_width; x++) {
+            uint32_t f = factors[x];
+            uint16_t c = row[x];
+            uint32_t r = (((c >> 11) & 0x1F) * f) >> 8;
+            uint32_t g = (((c >> 5) & 0x3F) * f) >> 8;
+            uint32_t b = ((c & 0x1F) * f) >> 8;
+            row[x] = (r << 11) | (g << 5) | b;
+        }
+    }
+}
+
+void render_game_logo(uint16_t *framebuffer, const Thumbnail *logo, int center_x, int y, int max_w, int max_h) {
+    if (!framebuffer || !logo || !logo->data || logo->width <= 0 || logo->height <= 0) return;
+
+    int orig_w = logo->width;
+    int orig_h = logo->height;
+    int draw_w = orig_w;
+    int draw_h = orig_h;
+
+    // Scale down while maintaining aspect ratio if exceeding maximum bounds
+    if (max_w > 0 && draw_w > max_w) {
+        draw_h = (draw_h * max_w) / draw_w;
+        draw_w = max_w;
+    }
+    if (max_h > 0 && draw_h > max_h) {
+        draw_w = (draw_w * max_h) / draw_h;
+        draw_h = max_h;
+    }
+    if (draw_w <= 0 || draw_h <= 0) return;
+
+    int start_x = center_x - (draw_w / 2);
+    int start_y = y;
+
+    // Fixed-point scaling with chroma key transparency (0x0000 and 0xF81F)
+    int step_x = (orig_w << 16) / draw_w;
+    int step_y = (orig_h << 16) / draw_h;
+    int src_y = 0;
+
+    for (int dy = 0; dy < draw_h; dy++) {
+        int py = start_y + dy;
+        if (py >= 0 && py < SCREEN_HEIGHT) {
+            int sy = src_y >> 16;
+            if (sy >= orig_h) sy = orig_h - 1;
+            const uint16_t *src_row = logo->data + sy * orig_w;
+            uint16_t *dst_row = framebuffer + py * SCREEN_WIDTH;
+            int src_x = 0;
+
+            for (int dx = 0; dx < draw_w; dx++) {
+                int px = start_x + dx;
+                if (px >= 0 && px < SCREEN_WIDTH) {
+                    uint16_t c = src_row[src_x >> 16];
+                    if (c != 0x0000 && c != 0xF81F) {
+                        dst_row[px] = c;
+                    }
+                }
+                src_x += step_x;
+            }
+        }
+        src_y += step_y;
     }
 }
 

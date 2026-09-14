@@ -285,6 +285,9 @@ static void register_all_default_settings(void) {
     add_default_setting_if_missing("frogui_resume_on_boot", "false", "false|true");
     add_default_setting_if_missing("frogui_hide_empty", "true", "true|false");
     add_default_setting_if_missing("frogui_list_pillbox", "false", "false|true");
+    add_default_setting_if_missing("frogui_vlist_fullscreen_art", "theme_default", "theme_default|true|false");
+    add_default_setting_if_missing("frogui_vlist_gradient", "theme_default", "theme_default|true|false");
+    add_default_setting_if_missing("frogui_vlist_show_logo", "theme_default", "theme_default|true|false");
     add_default_setting_if_missing("frogui_hidden_sections", "", "");
 }
 

@@ -159,6 +159,17 @@ typedef struct {
     int theme_logo_width;
     int theme_logo_height;
     int theme_logo_loaded;  // 0=not tried, 1=loaded, -1=failed
+
+    // vlist fullscreen art, gradient, and game logo
+    bool vlist_fullscreen_art;
+    bool has_custom_vlist_fullscreen_art;
+    bool vlist_gradient;
+    bool has_custom_vlist_gradient;
+    bool vlist_show_logo;
+    bool has_custom_vlist_show_logo;
+    int vlist_gradient_width;
+    int vlist_logo_x;
+    int vlist_logo_y;
 } GfxTheme;
 
 // Get menu layout specified by active GFX theme (or NULL if none)
@@ -172,6 +183,15 @@ float gfx_theme_get_anim_speed(void);
 bool gfx_theme_has_custom_anim_speed(void);
 const char* gfx_theme_get_bg_anim_mode(void);
 bool gfx_theme_has_custom_bg_anim_mode(void);
+bool gfx_theme_get_vlist_fullscreen_art(void);
+bool gfx_theme_has_custom_vlist_fullscreen_art(void);
+bool gfx_theme_get_vlist_gradient(void);
+bool gfx_theme_has_custom_vlist_gradient(void);
+bool gfx_theme_get_vlist_show_logo(void);
+bool gfx_theme_has_custom_vlist_show_logo(void);
+int gfx_theme_get_vlist_gradient_width(void);
+int gfx_theme_get_vlist_logo_x(void);
+int gfx_theme_get_vlist_logo_y(void);
 int gfx_theme_get_horizontal_y(void);
 int gfx_theme_get_horizontal_tile_w(void);
 int gfx_theme_get_horizontal_tile_h(void);

@@ -473,6 +473,27 @@ static int parse_theme_ini(const char* ini_path, GfxTheme* theme) {
             theme->bg_anim_mode[sizeof(theme->bg_anim_mode) - 1] = '\0';
             theme->has_custom_bg_anim_mode = true;
             continue;
+        } else if (strcasecmp(key, "vlist_fullscreen_art") == 0 || strcasecmp(key, "fullscreen_art") == 0 || strcasecmp(key, "vlist_art") == 0) {
+            theme->vlist_fullscreen_art = parse_bool_value(value);
+            theme->has_custom_vlist_fullscreen_art = true;
+            continue;
+        } else if (strcasecmp(key, "vlist_gradient") == 0 || strcasecmp(key, "art_gradient") == 0 || strcasecmp(key, "gradient") == 0) {
+            theme->vlist_gradient = parse_bool_value(value);
+            theme->has_custom_vlist_gradient = true;
+            continue;
+        } else if (strcasecmp(key, "vlist_show_logo") == 0 || strcasecmp(key, "show_game_logo") == 0 || strcasecmp(key, "game_logo") == 0) {
+            theme->vlist_show_logo = parse_bool_value(value);
+            theme->has_custom_vlist_show_logo = true;
+            continue;
+        } else if (strcasecmp(key, "vlist_gradient_width") == 0 || strcasecmp(key, "gradient_width") == 0) {
+            theme->vlist_gradient_width = atoi(value);
+            continue;
+        } else if (strcasecmp(key, "vlist_logo_x") == 0 || strcasecmp(key, "logo_x") == 0) {
+            theme->vlist_logo_x = atoi(value);
+            continue;
+        } else if (strcasecmp(key, "vlist_logo_y") == 0 || strcasecmp(key, "logo_y") == 0) {
+            theme->vlist_logo_y = atoi(value);
+            continue;
         }
 
         // Parse based on section
@@ -629,6 +650,23 @@ static int parse_theme_ini(const char* ini_path, GfxTheme* theme) {
                 theme->game_screenshot_y_start = atoi(value);
             } else if (strcasecmp(key, "game_screenshot_y_end") == 0) {
                 theme->game_screenshot_y_end = atoi(value);
+            }
+            // vlist fullscreen art, gradient, and game logo options
+            else if (strcasecmp(key, "vlist_fullscreen_art") == 0 || strcasecmp(key, "fullscreen_art") == 0 || strcasecmp(key, "vlist_art") == 0) {
+                theme->vlist_fullscreen_art = parse_bool_value(value);
+                theme->has_custom_vlist_fullscreen_art = true;
+            } else if (strcasecmp(key, "vlist_gradient") == 0 || strcasecmp(key, "art_gradient") == 0 || strcasecmp(key, "gradient") == 0) {
+                theme->vlist_gradient = parse_bool_value(value);
+                theme->has_custom_vlist_gradient = true;
+            } else if (strcasecmp(key, "vlist_show_logo") == 0 || strcasecmp(key, "show_game_logo") == 0 || strcasecmp(key, "game_logo") == 0) {
+                theme->vlist_show_logo = parse_bool_value(value);
+                theme->has_custom_vlist_show_logo = true;
+            } else if (strcasecmp(key, "vlist_gradient_width") == 0 || strcasecmp(key, "gradient_width") == 0) {
+                theme->vlist_gradient_width = atoi(value);
+            } else if (strcasecmp(key, "vlist_logo_x") == 0 || strcasecmp(key, "logo_x") == 0) {
+                theme->vlist_logo_x = atoi(value);
+            } else if (strcasecmp(key, "vlist_logo_y") == 0 || strcasecmp(key, "logo_y") == 0) {
+                theme->vlist_logo_y = atoi(value);
             }
         }
         else if (strcasecmp(section, "colors") == 0) {
@@ -1335,6 +1373,69 @@ int gfx_theme_get_game_label_offset_x(void) {
         return gfx_themes[current_gfx_theme].game_label_offset_x;
     }
     return 0;
+}
+
+bool gfx_theme_get_vlist_fullscreen_art(void) {
+    if (current_gfx_theme >= 0 && gfx_themes[current_gfx_theme].has_custom_vlist_fullscreen_art) {
+        return gfx_themes[current_gfx_theme].vlist_fullscreen_art;
+    }
+    return false;
+}
+
+bool gfx_theme_has_custom_vlist_fullscreen_art(void) {
+    if (current_gfx_theme >= 0) {
+        return gfx_themes[current_gfx_theme].has_custom_vlist_fullscreen_art;
+    }
+    return false;
+}
+
+bool gfx_theme_get_vlist_gradient(void) {
+    if (current_gfx_theme >= 0 && gfx_themes[current_gfx_theme].has_custom_vlist_gradient) {
+        return gfx_themes[current_gfx_theme].vlist_gradient;
+    }
+    return true;
+}
+
+bool gfx_theme_has_custom_vlist_gradient(void) {
+    if (current_gfx_theme >= 0) {
+        return gfx_themes[current_gfx_theme].has_custom_vlist_gradient;
+    }
+    return false;
+}
+
+bool gfx_theme_get_vlist_show_logo(void) {
+    if (current_gfx_theme >= 0 && gfx_themes[current_gfx_theme].has_custom_vlist_show_logo) {
+        return gfx_themes[current_gfx_theme].vlist_show_logo;
+    }
+    return true;
+}
+
+bool gfx_theme_has_custom_vlist_show_logo(void) {
+    if (current_gfx_theme >= 0) {
+        return gfx_themes[current_gfx_theme].has_custom_vlist_show_logo;
+    }
+    return false;
+}
+
+int gfx_theme_get_vlist_gradient_width(void) {
+    if (current_gfx_theme >= 0 && gfx_themes[current_gfx_theme].vlist_gradient_width > 0) {
+        return gfx_themes[current_gfx_theme].vlist_gradient_width;
+    }
+    return 160;
+}
+
+int gfx_theme_get_vlist_logo_x(void) {
+    if (current_gfx_theme >= 0 && gfx_themes[current_gfx_theme].vlist_logo_x > 0) {
+        return gfx_themes[current_gfx_theme].vlist_logo_x;
+    }
+    return 225;
+}
+
+int gfx_theme_get_vlist_logo_y(void) {
+    if (current_gfx_theme >= 0 && gfx_themes[current_gfx_theme].vlist_logo_y > 0) {
+        return gfx_themes[current_gfx_theme].vlist_logo_y;
+    }
+    return 30;
 }
 
 typedef struct {

@@ -419,6 +419,11 @@ static Thumbnail current_screenshot;
 static char cached_screenshot_path[MAX_PATH_LEN];
 static int screenshot_cache_valid = 0;
 
+// Game logo cache (game_name-logo.rgb565, etc.)
+static Thumbnail current_game_logo;
+static char cached_game_logo_path[MAX_PATH_LEN];
+static int game_logo_cache_valid = 0;
+
 // Text scrolling state
 static int text_scroll_frame_counter = 0;
 static int text_scroll_offset = 0;
@@ -1385,6 +1390,198 @@ static void render_screenshot(uint16_t *framebuffer) {
     }
 }
 
+// Game logo loading and vertical list fullscreen art helpers
+static void free_current_game_logo(void) {
+    if (current_game_logo.data) {
+        free(current_game_logo.data);
+        current_game_logo.data = NULL;
+    }
+    current_game_logo.width = 0;
+    current_game_logo.height = 0;
+    game_logo_cache_valid = 0;
+    cached_game_logo_path[0] = '\0';
+}
+
+static int file_exists(const char *path) {
+    if (!path || path[0] == '\0') return 0;
+    FILE *f = fopen(path, "rb");
+    if (f) {
+        fclose(f);
+        return 1;
+    }
+    return 0;
+}
+
+static int load_game_logo_from_file(const char *path, Thumbnail *logo) {
+    if (!path || !logo) return 0;
+    const char *ext = strrchr(path, '.');
+    if (!ext) return 0;
+
+    if (strcasecmp(ext, ".rgb565") == 0) {
+        FILE *fp = fopen(path, "rb");
+        if (!fp) return 0;
+        fseek(fp, 0, SEEK_END);
+        long file_size = ftell(fp);
+        fseek(fp, 0, SEEK_SET);
+
+        int dimensions[][2] = {
+            {64, 64}, {80, 40}, {100, 50}, {120, 60}, {128, 64}, {128, 128},
+            {140, 70}, {144, 208}, {150, 75}, {160, 80}, {160, 100}, {160, 160},
+            {200, 80}, {200, 100}, {200, 200}, {250, 200}, {200, 250}, {320, 240}
+        };
+        int num_dims = sizeof(dimensions) / sizeof(dimensions[0]);
+        int w = 0, h = 0;
+        for (int i = 0; i < num_dims; i++) {
+            if (dimensions[i][0] * dimensions[i][1] * 2 == file_size) {
+                w = dimensions[i][0];
+                h = dimensions[i][1];
+                break;
+            }
+        }
+        if (w == 0) {
+            fclose(fp);
+            return 0;
+        }
+
+        uint16_t *buf = (uint16_t*)malloc(file_size);
+        if (!buf) {
+            fclose(fp);
+            return 0;
+        }
+        if (fread(buf, 1, file_size, fp) != (size_t)file_size) {
+            free(buf);
+            fclose(fp);
+            return 0;
+        }
+        fclose(fp);
+        logo->data = buf;
+        logo->width = w;
+        logo->height = h;
+        return 1;
+    } else if (strcasecmp(ext, ".png") == 0) {
+        uint16_t *pixels = NULL;
+        int w = 0, h = 0;
+        if (load_png_rgb565(path, &pixels, &w, &h)) {
+            logo->data = pixels;
+            logo->width = w;
+            logo->height = h;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void load_current_game_logo(void) {
+    if (selected_index < 0 || selected_index >= entry_count || entry_count == 0) {
+        free_current_game_logo();
+        return;
+    }
+    if (entries[selected_index].is_dir) {
+        free_current_game_logo();
+        return;
+    }
+
+    const char *game_path = NULL;
+    if (strcmp(current_path, "RECENT_GAMES") == 0) {
+        const RecentGame* recent_list = recent_games_get_list();
+        int recent_count = recent_games_get_count();
+        if (selected_index < recent_count && recent_list[selected_index].full_path[0] != '\0') {
+            game_path = recent_list[selected_index].full_path;
+        } else {
+            free_current_game_logo();
+            return;
+        }
+    } else if (strcmp(current_path, "FAVORITES") == 0) {
+        const FavoriteGame* favorites_list = favorites_get_list();
+        int favorites_count = favorites_get_count();
+        if (selected_index < favorites_count && favorites_list[selected_index].full_path[0] != '\0') {
+            game_path = favorites_list[selected_index].full_path;
+        } else {
+            free_current_game_logo();
+            return;
+        }
+    } else {
+        game_path = entries[selected_index].path;
+    }
+
+    if (!game_path || game_path[0] == '\0') {
+        free_current_game_logo();
+        return;
+    }
+
+    const char *last_slash = strrchr(game_path, '/');
+    if (!last_slash) {
+        free_current_game_logo();
+        return;
+    }
+
+    char dir_path[MAX_PATH_LEN];
+    size_t dir_len = last_slash - game_path;
+    if (dir_len >= sizeof(dir_path)) dir_len = sizeof(dir_path) - 1;
+    strncpy(dir_path, game_path, dir_len);
+    dir_path[dir_len] = '\0';
+
+    const char *filename = last_slash + 1;
+    char clean_name[128];
+    strncpy(clean_name, filename, sizeof(clean_name) - 1);
+    clean_name[sizeof(clean_name) - 1] = '\0';
+    char *dot = strrchr(clean_name, '.');
+    if (dot) *dot = '\0';
+
+    char try_path[MAX_PATH_LEN];
+    const char *patterns[] = {
+        "%s/.res/%s-logo.rgb565",
+        "%s/.res/%s_logo.rgb565",
+        "%s/.res/%s.logo.rgb565",
+        "%s/.res/%s-wheel.rgb565",
+        "%s/.res/%s_wheel.rgb565",
+        "%s/.res/%s-logo.png",
+        "%s/.res/%s_logo.png",
+        "%s/%s-logo.rgb565",
+        "%s/%s-logo.png",
+        NULL
+    };
+
+    for (int p = 0; patterns[p]; p++) {
+        snprintf(try_path, sizeof(try_path), patterns[p], dir_path, clean_name);
+        if (file_exists(try_path)) {
+            if (game_logo_cache_valid && strcmp(cached_game_logo_path, try_path) == 0) {
+                return;
+            }
+            free_current_game_logo();
+            if (load_game_logo_from_file(try_path, &current_game_logo)) {
+                strncpy(cached_game_logo_path, try_path, sizeof(cached_game_logo_path) - 1);
+                cached_game_logo_path[sizeof(cached_game_logo_path) - 1] = '\0';
+                game_logo_cache_valid = 1;
+                return;
+            }
+        }
+    }
+
+    free_current_game_logo();
+}
+
+static bool is_vlist_fullscreen_art_enabled(void) {
+    const char *s = settings_get_value("frogui_vlist_fullscreen_art");
+    if (s && strcmp(s, "true") == 0) return true;
+    if (s && strcmp(s, "false") == 0) return false;
+    return gfx_theme_get_vlist_fullscreen_art();
+}
+
+static bool is_vlist_gradient_enabled(void) {
+    const char *s = settings_get_value("frogui_vlist_gradient");
+    if (s && strcmp(s, "true") == 0) return true;
+    if (s && strcmp(s, "false") == 0) return false;
+    return gfx_theme_get_vlist_gradient();
+}
+
+static bool is_vlist_logo_enabled(void) {
+    const char *s = settings_get_value("frogui_vlist_show_logo");
+    if (s && strcmp(s, "true") == 0) return true;
+    if (s && strcmp(s, "false") == 0) return false;
+    return gfx_theme_get_vlist_show_logo();
+}
+
 // Check if path is a directory - optimized to use d_type first
 static inline int is_directory_fast(const char *path, unsigned char d_type) {
     // Use d_type if available (much faster, no stat call needed)
@@ -1449,9 +1646,10 @@ static void show_recent_games(void) {
         entry_count++;
     }
     
-    // Load thumbnail/screenshot for initially selected item AND reset last_selected_index to prevent duplicate loading
+    // Load thumbnail/screenshot/logo for initially selected item AND reset last_selected_index to prevent duplicate loading
     load_current_thumbnail();
     load_current_screenshot();
+    load_current_game_logo();
     last_selected_index = selected_index;  // Prevent render loop from detecting this as a "change"
 }
 
@@ -1465,9 +1663,10 @@ static void show_favorites(void) {
     strncpy(current_path, "FAVORITES", sizeof(current_path) - 1);
     current_path[sizeof(current_path) - 1] = '\0';
 
-    // Clear thumbnail/screenshot cache when switching to favorites mode
+    // Clear thumbnail/screenshot/logo cache when switching to favorites mode
     thumbnail_cache_valid = 0;
     screenshot_cache_valid = 0;
+    free_current_game_logo();
 
     const FavoriteGame* favorites_list = favorites_get_list();
     int favorites_count = favorites_get_count();
@@ -1497,9 +1696,10 @@ static void show_favorites(void) {
         entry_count++;
     }
 
-    // Load thumbnail/screenshot for initially selected item AND reset last_selected_index to prevent duplicate loading
+    // Load thumbnail/screenshot/logo for initially selected item AND reset last_selected_index to prevent duplicate loading
     load_current_thumbnail();
     load_current_screenshot();
+    load_current_game_logo();
     last_selected_index = selected_index;  // Prevent render loop from detecting this as a "change"
 }
 
@@ -1998,6 +2198,7 @@ static void scan_directory(const char *path) {
     // The render loop will handle loading thumbnails on the first frame
     thumbnail_cache_valid = 0;
     screenshot_cache_valid = 0;
+    free_current_game_logo();
     last_selected_index = -1;  // Force load on first render
 }
 
@@ -2352,6 +2553,7 @@ static int last_platform_idx = -1;
     if (last_selected_index != selected_index) {
         load_current_thumbnail();
         load_current_screenshot();  // v32: Load screenshot too
+        load_current_game_logo();
         last_selected_index = selected_index;
         // Reset scrolling state for new selection
         text_scroll_frame_counter = 0;
@@ -2359,19 +2561,43 @@ static int last_platform_idx = -1;
         text_scroll_direction = 1;
     }
 
-    // v42: Only show thumbnail if screenshot is NOT configured in theme
-    // Screenshot system takes priority (theme-controlled position)
-    // v61: Allow start=0 for full-screen, check end > 0 instead
-    int screenshot_enabled = (gfx_theme_get_screenshot_x_end() > 0 &&
-                              gfx_theme_get_screenshot_x_end() > gfx_theme_get_screenshot_x_start());
+    bool is_vlist_fs_art = (!render_is_in_platform_menu() &&
+                            !is_horizontal_menu() &&
+                            get_grid_cols() == 1 &&
+                            is_vlist_fullscreen_art_enabled());
 
-    if (!screenshot_enabled && thumbnail_cache_valid) {
-        render_thumbnail(framebuffer, &current_thumbnail);
-    }
+    if (is_vlist_fs_art) {
+        render_set_vlist_fullscreen_art(true);
+        if (thumbnail_cache_valid && current_thumbnail.data) {
+            render_thumbnail_fullscreen(framebuffer, &current_thumbnail);
+        } else if (screenshot_cache_valid && current_screenshot.data) {
+            render_thumbnail_fullscreen(framebuffer, &current_screenshot);
+        }
+        if (is_vlist_gradient_enabled()) {
+            int grad_w = gfx_theme_get_vlist_gradient_width();
+            render_apply_horizontal_gradient(framebuffer, grad_w);
+        }
+        if (is_vlist_logo_enabled() && game_logo_cache_valid && current_game_logo.data) {
+            int lx = gfx_theme_get_vlist_logo_x();
+            int ly = gfx_theme_get_vlist_logo_y();
+            render_game_logo(framebuffer, &current_game_logo, lx, ly, 140, 70);
+        }
+    } else {
+        render_set_vlist_fullscreen_art(false);
+        // v42: Only show thumbnail if screenshot is NOT configured in theme
+        // Screenshot system takes priority (theme-controlled position)
+        // v61: Allow start=0 for full-screen, check end > 0 instead
+        int screenshot_enabled = (gfx_theme_get_screenshot_x_end() > 0 &&
+                                  gfx_theme_get_screenshot_x_end() > gfx_theme_get_screenshot_x_start());
 
-    // v32: Render screenshot in theme-defined area (if configured)
-    if (screenshot_cache_valid) {
-        render_screenshot(framebuffer);
+        if (!screenshot_enabled && thumbnail_cache_valid) {
+            render_thumbnail(framebuffer, &current_thumbnail);
+        }
+
+        // v32: Render screenshot in theme-defined area (if configured)
+        if (screenshot_cache_valid) {
+            render_screenshot(framebuffer);
+        }
     }
 
     // v61: Apply PNG overlay after images but before text
@@ -4319,6 +4545,9 @@ void retro_deinit(void) {
         }
         screenshot_cache_valid = 0;
     }
+
+    // Free game logo cache
+    free_current_game_logo();
 
     // Free entries array
     if (entries) {

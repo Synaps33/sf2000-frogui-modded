@@ -108,6 +108,19 @@ void free_thumbnail(Thumbnail *thumb);
 // Draw thumbnail in the thumbnail area
 void render_thumbnail(uint16_t *framebuffer, const Thumbnail *thumb);
 
+// Draw thumbnail fullscreen (320x240) as background layer behind game list
+void render_thumbnail_fullscreen(uint16_t *framebuffer, const Thumbnail *thumb);
+
+// Apply horizontal black gradient fade from left side
+void render_apply_horizontal_gradient(uint16_t *framebuffer, int grad_width);
+
+// Draw game logo on right side with black/magenta chroma key
+void render_game_logo(uint16_t *framebuffer, const Thumbnail *logo, int center_x, int y, int max_w, int max_h);
+
+// Set/get whether fullscreen vertical list art mode is active
+void render_set_vlist_fullscreen_art(bool active);
+bool render_get_vlist_fullscreen_art(void);
+
 // Get thumbnail path for a given game file
 void get_thumbnail_path(const char *game_path, char *thumb_path, size_t thumb_path_size);
 

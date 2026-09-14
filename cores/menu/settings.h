@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#define MAX_SETTINGS 32
+#define MAX_SETTINGS 64
 #define MAX_OPTION_NAME_LEN 64
 #define MAX_OPTION_VALUE_LEN 512
 #define MAX_OPTION_VALUES 128
