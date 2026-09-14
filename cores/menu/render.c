@@ -238,31 +238,62 @@ void render_draw_image_sized(uint16_t *framebuffer, int start_x, int start_y, in
                             int src_w, int src_h, uint8_t alpha_multiplier) {
     if (!framebuffer || !pixels || src_w <= 0 || src_h <= 0 || target_w <= 0 || target_h <= 0) return;
 
-    for (int dy = 0; dy < target_h; dy++) {
-        int py = start_y + dy;
+    // Scale to fit while maintaining aspect ratio
+    int draw_w = target_w;
+    int draw_h = (src_h * target_w) / src_w;
+    if (draw_h > target_h) {
+        draw_h = target_h;
+        draw_w = (src_w * target_h) / src_h;
+    }
+    if (draw_w <= 0) draw_w = 1;
+    if (draw_h <= 0) draw_h = 1;
+
+    // Center within target box
+    int offset_x = start_x + (target_w - draw_w) / 2;
+    int offset_y = start_y + (target_h - draw_h) / 2;
+
+    int step_x = (src_w << 16) / draw_w;
+    int step_y = (src_h << 16) / draw_h;
+    int src_y_fp = 0;
+
+    for (int dy = 0; dy < draw_h; dy++) {
+        int py = offset_y + dy;
+        int sy = src_y_fp >> 16;
+        src_y_fp += step_y;
+        if (sy >= src_h) sy = src_h - 1;
+
         if (py < 0 || py >= SCREEN_HEIGHT) continue;
 
-        int sy = (dy * src_h) / target_h;
+        const uint16_t *src_row_pixels = pixels + sy * src_w;
+        const uint8_t *src_row_alpha = alpha ? (alpha + sy * src_w) : NULL;
+        uint16_t *dst_row = framebuffer + py * SCREEN_WIDTH;
+        int src_x_fp = 0;
 
-        for (int dx = 0; dx < target_w; dx++) {
-            int px = start_x + dx;
+        for (int dx = 0; dx < draw_w; dx++) {
+            int px = offset_x + dx;
+            int sx = src_x_fp >> 16;
+            src_x_fp += step_x;
+            if (sx >= src_w) sx = src_w - 1;
+
             if (px < 0 || px >= SCREEN_WIDTH) continue;
 
-            int sx = (dx * src_w) / target_w;
-            int src_idx = sy * src_w + sx;
+            uint16_t color = src_row_pixels[sx];
 
-            uint8_t a = alpha ? alpha[src_idx] : 255;
+            // Chroma key transparency for raw RGB565 (black 0x0000 and magenta 0xF81F)
+            if (!alpha && (color == 0x0000 || color == 0xF81F)) {
+                continue;
+            }
+
+            uint8_t a = src_row_alpha ? src_row_alpha[sx] : 255;
             if (alpha_multiplier != 255) {
                 a = (uint8_t)(((uint16_t)a * alpha_multiplier) / 255);
             }
             if (a == 0) continue;
 
-            uint16_t color = pixels[src_idx];
-
             if (a == 255) {
-                framebuffer[py * SCREEN_WIDTH + px] = color;
+                dst_row[px] = color;
             } else {
-                uint16_t bg = framebuffer[py * SCREEN_WIDTH + px];
+                uint16_t bg = dst_row[px];
                 uint8_t r_src = ((color >> 11) & 0x1F) << 3;
                 uint8_t g_src = ((color >> 5) & 0x3F) << 2;
                 uint8_t b_src = (color & 0x1F) << 3;
@@ -275,7 +306,7 @@ void render_draw_image_sized(uint16_t *framebuffer, int start_x, int start_y, in
                 uint8_t g = (g_src * a + g_bg * (255 - a)) / 255;
                 uint8_t b = (b_src * a + b_bg * (255 - a)) / 255;
 
-                framebuffer[py * SCREEN_WIDTH + px] = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
+                dst_row[px] = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
             }
         }
     }
@@ -303,15 +334,21 @@ static int load_raw_horiz_rgb565(const char *path, uint16_t **pixels, int *width
     long file_size = ftell(fp);
     fseek(fp, 0, SEEK_SET);
 
+    static const int dimensions[][2] = {
+        {64, 64}, {80, 40}, {100, 50}, {120, 60}, {128, 64}, {128, 128},
+        {140, 70}, {144, 208}, {150, 75}, {160, 80}, {160, 100}, {160, 160},
+        {200, 80}, {200, 100}, {200, 200}, {250, 200}, {200, 250}, {320, 240}
+    };
+    int num_dims = sizeof(dimensions) / sizeof(dimensions[0]);
     int w = 0, h = 0;
-    if (file_size == 144 * 208 * 2) { w = 144; h = 208; }
-    else if (file_size == 160 * 160 * 2) { w = 160; h = 160; }
-    else if (file_size == 128 * 128 * 2) { w = 128; h = 128; }
-    else if (file_size == 200 * 200 * 2) { w = 200; h = 200; }
-    else if (file_size == 250 * 200 * 2) { w = 250; h = 200; }
-    else if (file_size == 320 * 240 * 2) { w = 320; h = 240; }
-    else if (file_size == 64 * 64 * 2) { w = 64; h = 64; }
-    else {
+    for (int i = 0; i < num_dims; i++) {
+        if (dimensions[i][0] * dimensions[i][1] * 2 == file_size) {
+            w = dimensions[i][0];
+            h = dimensions[i][1];
+            break;
+        }
+    }
+    if (w == 0) {
         fclose(fp);
         return 0;
     }
@@ -339,6 +376,7 @@ static int load_raw_horiz_rgb565(const char *path, uint16_t **pixels, int *width
 typedef struct {
     char path[256];
     uint16_t *pixels;
+    uint8_t *alpha;
     int w, h;
     uint32_t last_used;
 } HorizThumbCache;
@@ -346,11 +384,12 @@ typedef struct {
 static HorizThumbCache horiz_thumb_cache[HORIZ_THUMB_CACHE_SIZE];
 static uint32_t horiz_thumb_ticks = 0;
 
-static bool get_horiz_cached_thumb(const char *path, uint16_t **pixels, int *w, int *h) {
+static bool get_horiz_cached_thumb(const char *path, uint16_t **pixels, uint8_t **alpha, int *w, int *h) {
     horiz_thumb_ticks++;
     for (int i = 0; i < HORIZ_THUMB_CACHE_SIZE; i++) {
         if (horiz_thumb_cache[i].path[0] != '\0' && strcmp(horiz_thumb_cache[i].path, path) == 0) {
             *pixels = horiz_thumb_cache[i].pixels;
+            if (alpha) *alpha = horiz_thumb_cache[i].alpha;
             *w = horiz_thumb_cache[i].w;
             *h = horiz_thumb_cache[i].h;
             horiz_thumb_cache[i].last_used = horiz_thumb_ticks;
@@ -360,7 +399,7 @@ static bool get_horiz_cached_thumb(const char *path, uint16_t **pixels, int *w, 
     return false;
 }
 
-static void add_horiz_cached_thumb(const char *path, uint16_t *pixels, int w, int h) {
+static void add_horiz_cached_thumb(const char *path, uint16_t *pixels, const uint8_t *alpha, int w, int h) {
     if (!path || !path[0]) return;
     
     int best_slot = 0;
@@ -381,6 +420,10 @@ static void add_horiz_cached_thumb(const char *path, uint16_t *pixels, int w, in
         free(horiz_thumb_cache[best_slot].pixels);
         horiz_thumb_cache[best_slot].pixels = NULL;
     }
+    if (horiz_thumb_cache[best_slot].alpha) {
+        free(horiz_thumb_cache[best_slot].alpha);
+        horiz_thumb_cache[best_slot].alpha = NULL;
+    }
     
     strncpy(horiz_thumb_cache[best_slot].path, path, 255);
     horiz_thumb_cache[best_slot].path[255] = '\0';
@@ -393,12 +436,37 @@ static void add_horiz_cached_thumb(const char *path, uint16_t *pixels, int w, in
             horiz_thumb_cache[best_slot].w = w;
             horiz_thumb_cache[best_slot].h = h;
         }
+        if (alpha) {
+            size_t alpha_bytes = w * h;
+            horiz_thumb_cache[best_slot].alpha = malloc(alpha_bytes);
+            if (horiz_thumb_cache[best_slot].alpha) {
+                memcpy(horiz_thumb_cache[best_slot].alpha, alpha, alpha_bytes);
+            }
+        }
     } else {
         horiz_thumb_cache[best_slot].pixels = NULL;
+        horiz_thumb_cache[best_slot].alpha = NULL;
         horiz_thumb_cache[best_slot].w = 0;
         horiz_thumb_cache[best_slot].h = 0;
     }
     horiz_thumb_cache[best_slot].last_used = horiz_thumb_ticks;
+}
+
+void render_clear_horiz_thumb_cache(void) {
+    for (int i = 0; i < HORIZ_THUMB_CACHE_SIZE; i++) {
+        if (horiz_thumb_cache[i].pixels) {
+            free(horiz_thumb_cache[i].pixels);
+            horiz_thumb_cache[i].pixels = NULL;
+        }
+        if (horiz_thumb_cache[i].alpha) {
+            free(horiz_thumb_cache[i].alpha);
+            horiz_thumb_cache[i].alpha = NULL;
+        }
+        horiz_thumb_cache[i].path[0] = '\0';
+        horiz_thumb_cache[i].w = 0;
+        horiz_thumb_cache[i].h = 0;
+        horiz_thumb_cache[i].last_used = 0;
+    }
 }
 
 void render_menu_item(uint16_t *framebuffer, int index, const char *name, const char *game_path, int is_dir,
@@ -495,8 +563,10 @@ void render_menu_item(uint16_t *framebuffer, int index, const char *name, const 
             show_icons = true;
         } else if (show_game_icons_setting && strcmp(show_game_icons_setting, "false") == 0) {
             show_icons = false;
-        } else {
+        } else if (gfx_theme_has_custom_show_game_icons()) {
             show_icons = gfx_theme_get_show_game_icons();
+        } else {
+            show_icons = is_horizontal ? true : false;
         }
     }
 
@@ -603,80 +673,134 @@ void render_menu_item(uint16_t *framebuffer, int index, const char *name, const 
                 text_in_empty = gfx_theme_get_text_in_empty_icon();
             }
             if (!in_platform_menu && game_path && game_path[0] != '\0') {
-                char path1[256];
-                get_thumbnail_path(game_path, path1, sizeof(path1));
-                char *d1 = strrchr(path1, '.');
-                if (d1) {
-                    strcpy(d1, "-icon.rgb565");
-                }
-                
-                char path2[256];
-                strncpy(path2, game_path, sizeof(path2) - 1);
-                path2[sizeof(path2) - 1] = '\0';
-                char *d2 = strrchr(path2, '.');
-                if (d2) {
-                    strcpy(d2, "-icon.rgb565");
-                } else {
-                    strncat(path2, "-icon.rgb565", sizeof(path2) - strlen(path2) - 1);
-                }
-                
-                uint16_t *cached_px = NULL;
-                int cached_w = 0, cached_h = 0;
-                
-                if (get_horiz_cached_thumb(path1, &cached_px, &cached_w, &cached_h)) {
-                    if (cached_px) {
-                        logo_pixels = cached_px;
+                if (is_selected) {
+                    const Thumbnail *curr_logo = get_current_game_logo();
+                    if (curr_logo && curr_logo->data) {
+                        logo_pixels = curr_logo->data;
                         logo_alpha = NULL;
-                        logo_w = cached_w;
-                        logo_h = cached_h;
+                        logo_w = curr_logo->width;
+                        logo_h = curr_logo->height;
                         has_logo = true;
                     }
-                } else {
-                    uint16_t *raw_pixels = NULL;
-                    int raw_w = 0, raw_h = 0;
-                    
-                    if (load_raw_horiz_rgb565(path1, &raw_pixels, &raw_w, &raw_h) ||
-                        load_raw_horiz_rgb565(path2, &raw_pixels, &raw_w, &raw_h)) {
-                        
-                        logo_pixels = raw_pixels;
-                        logo_alpha = NULL;
-                        logo_w = raw_w;
-                        logo_h = raw_h;
-                        has_logo = true;
-                        
-                        add_horiz_cached_thumb(path1, raw_pixels, raw_w, raw_h);
-                        local_thumb_allocated = true; // We malloced inside load_raw_horiz_rgb565
-                    } else {
-                        // Check for -icon.png in game folder
-                        char path2_png[256];
-                        strncpy(path2_png, path2, sizeof(path2_png) - 1);
-                        path2_png[sizeof(path2_png) - 1] = '\0';
-                        char *ext = strstr(path2_png, ".rgb565");
-                        if (ext) strcpy(ext, ".png");
-                        
-                        uint8_t *raw_alpha = NULL;
-                        extern int load_png_rgba565(const char* filename, uint16_t** pixels, uint8_t** alpha, int* width, int* height);
-                        if (load_png_rgba565(path2_png, &raw_pixels, &raw_alpha, &raw_w, &raw_h)) {
-                            logo_pixels = raw_pixels;
-                            logo_alpha = raw_alpha;
-                            logo_w = raw_w;
-                            logo_h = raw_h;
+                }
+
+                if (!has_logo) {
+                    uint16_t *cached_px = NULL;
+                    uint8_t *cached_alpha = NULL;
+                    int cached_w = 0, cached_h = 0;
+
+                    if (get_horiz_cached_thumb(game_path, &cached_px, &cached_alpha, &cached_w, &cached_h)) {
+                        if (cached_px) {
+                            logo_pixels = cached_px;
+                            logo_alpha = cached_alpha;
+                            logo_w = cached_w;
+                            logo_h = cached_h;
                             has_logo = true;
-                            // Note: caching of PNG with alpha in this cache isn't fully supported without alpha array, 
-                            // but we can skip caching or handle it. The cache only stores RGB565.
-                            // We won't cache PNGs to keep it simple and avoid memory leaks.
-                            local_thumb_allocated = true; 
-                            local_alpha_allocated = true;
-                        } else {
-                            add_horiz_cached_thumb(path1, NULL, 0, 0); // Cache negative hit
+                        }
+                    } else {
+                        const char *last_slash = strrchr(game_path, '/');
+                        char dir_path[256] = "";
+                        const char *filename = game_path;
+                        if (last_slash) {
+                            size_t dlen = last_slash - game_path;
+                            if (dlen >= sizeof(dir_path)) dlen = sizeof(dir_path) - 1;
+                            strncpy(dir_path, game_path, dlen);
+                            dir_path[dlen] = '\0';
+                            filename = last_slash + 1;
+                        }
+                        char clean_name[128];
+                        strncpy(clean_name, filename, sizeof(clean_name) - 1);
+                        clean_name[sizeof(clean_name) - 1] = '\0';
+                        char *dot = strrchr(clean_name, '.');
+                        if (dot) *dot = '\0';
+
+                        static const char *horiz_logo_patterns[] = {
+                            "%s/.res/%s-logo.rgb565",
+                            "%s/.res/%s_logo.rgb565",
+                            "%s/.res/%s.logo.rgb565",
+                            "%s/.res/%s-wheel.rgb565",
+                            "%s/.res/%s_wheel.rgb565",
+                            "%s/.res/%s-icon.rgb565",
+                            "%s/.res/%s_icon.rgb565",
+                            "%s/.res/%s.icon.rgb565",
+                            "%s/%s-logo.rgb565",
+                            "%s/%s_logo.rgb565",
+                            "%s/%s-wheel.rgb565",
+                            "%s/%s-icon.rgb565",
+                            "%s/.res/%s.rgb565",
+                            "%s/%s.rgb565",
+                            NULL
+                        };
+
+                        char test_path[512];
+                        uint16_t *raw_pixels = NULL;
+                        int raw_w = 0, raw_h = 0;
+
+                        for (int p = 0; horiz_logo_patterns[p]; p++) {
+                            snprintf(test_path, sizeof(test_path), horiz_logo_patterns[p], dir_path, clean_name);
+                            if (load_raw_horiz_rgb565(test_path, &raw_pixels, &raw_w, &raw_h)) {
+                                logo_pixels = raw_pixels;
+                                logo_alpha = NULL;
+                                logo_w = raw_w;
+                                logo_h = raw_h;
+                                has_logo = true;
+                                add_horiz_cached_thumb(game_path, raw_pixels, NULL, raw_w, raw_h);
+                                local_thumb_allocated = true;
+                                break;
+                            }
+                        }
+
+                        if (!has_logo) {
+                            static const char *horiz_png_patterns[] = {
+                                "%s/.res/%s-logo.png",
+                                "%s/.res/%s_logo.png",
+                                "%s/.res/%s-wheel.png",
+                                "%s/.res/%s-icon.png",
+                                "%s/%s-logo.png",
+                                "%s/%s-icon.png",
+                                "%s/.res/%s.png",
+                                "%s/%s.png",
+                                NULL
+                            };
+
+                            uint8_t *raw_alpha = NULL;
+                            extern int load_png_rgba565(const char* filename, uint16_t** pixels, uint8_t** alpha, int* width, int* height);
+                            for (int p = 0; horiz_png_patterns[p]; p++) {
+                                snprintf(test_path, sizeof(test_path), horiz_png_patterns[p], dir_path, clean_name);
+                                if (load_png_rgba565(test_path, &raw_pixels, &raw_alpha, &raw_w, &raw_h)) {
+                                    logo_pixels = raw_pixels;
+                                    logo_alpha = raw_alpha;
+                                    logo_w = raw_w;
+                                    logo_h = raw_h;
+                                    has_logo = true;
+                                    add_horiz_cached_thumb(game_path, raw_pixels, raw_alpha, raw_w, raw_h);
+                                    local_thumb_allocated = true;
+                                    local_alpha_allocated = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (!has_logo) {
+                            add_horiz_cached_thumb(game_path, NULL, NULL, 0, 0); // Cache negative hit
                         }
                     }
                 }
             }
             
             if (has_logo) {
-                if (is_selected && sel_bg) {
-                    render_rect(framebuffer, logo_x - 3, logo_y - 3, tile_w + 6, tile_h + 6, COLOR_SELECT_BG);
+                if (is_selected) {
+                    if (sel_bg) {
+                        render_rect(framebuffer, logo_x - 3, logo_y - 3, tile_w + 6, tile_h + 6, COLOR_SELECT_BG);
+                        render_rect(framebuffer, logo_x - 2, logo_y - 2, tile_w + 4, tile_h + 4, COLOR_SELECT_BG);
+                    }
+                    if (empty_bg) {
+                        render_rounded_rect(framebuffer, logo_x, logo_y, tile_w, tile_h, 8, 0x2124);
+                    }
+                } else {
+                    if (empty_bg) {
+                        render_rounded_rect(framebuffer, logo_x, logo_y, tile_w, tile_h, 8, 0x18C3);
+                    }
                 }
                 
                 uint8_t alpha_mult = 255;
@@ -794,57 +918,116 @@ void render_menu_item(uint16_t *framebuffer, int index, const char *name, const 
         }
 
         if (!in_platform_menu && game_path && game_path[0] != '\0' && !has_logo) {
-            char path1[256];
-            get_thumbnail_path(game_path, path1, sizeof(path1));
-            char *d1 = strrchr(path1, '.');
-            if (d1) strcpy(d1, "-icon.rgb565");
-
-            char path2[256];
-            strncpy(path2, game_path, sizeof(path2) - 1);
-            path2[sizeof(path2) - 1] = '\0';
-            char *d2 = strrchr(path2, '.');
-            if (d2) strcpy(d2, "-icon.rgb565");
-            else strncat(path2, "-icon.rgb565", sizeof(path2) - strlen(path2) - 1);
-
-            uint16_t *cached_px = NULL;
-            int cached_w = 0, cached_h = 0;
-            if (get_horiz_cached_thumb(path1, &cached_px, &cached_w, &cached_h)) {
-                if (cached_px) {
-                    logo_pixels = cached_px;
+            if (is_selected) {
+                const Thumbnail *curr_logo = get_current_game_logo();
+                if (curr_logo && curr_logo->data) {
+                    logo_pixels = curr_logo->data;
                     logo_alpha = NULL;
-                    logo_w = cached_w;
-                    logo_h = cached_h;
+                    logo_w = curr_logo->width;
+                    logo_h = curr_logo->height;
                     has_logo = true;
                 }
-            } else {
-                uint16_t *raw_pixels = NULL;
-                int raw_w = 0, raw_h = 0;
-                if (load_raw_horiz_rgb565(path1, &raw_pixels, &raw_w, &raw_h) ||
-                    load_raw_horiz_rgb565(path2, &raw_pixels, &raw_w, &raw_h)) {
-                    logo_pixels = raw_pixels;
-                    logo_alpha = NULL;
-                    logo_w = raw_w;
-                    logo_h = raw_h;
-                    has_logo = true;
-                    add_horiz_cached_thumb(path1, raw_pixels, raw_w, raw_h);
-                    local_thumb_allocated = true;
-                } else {
-                    char path2_png[256];
-                    strncpy(path2_png, path2, sizeof(path2_png) - 1);
-                    path2_png[sizeof(path2_png) - 1] = '\0';
-                    char *ext = strstr(path2_png, ".rgb565");
-                    if (ext) strcpy(ext, ".png");
+            }
 
-                    uint8_t *raw_alpha = NULL;
-                    extern int load_png_rgba565(const char* filename, uint16_t** pixels, uint8_t** alpha, int* width, int* height);
-                    if (load_png_rgba565(path2_png, &raw_pixels, &raw_alpha, &raw_w, &raw_h)) {
-                        logo_pixels = raw_pixels;
-                        logo_alpha = raw_alpha;
-                        logo_w = raw_w;
-                        logo_h = raw_h;
+            if (!has_logo) {
+                uint16_t *cached_px = NULL;
+                uint8_t *cached_alpha = NULL;
+                int cached_w = 0, cached_h = 0;
+
+                if (get_horiz_cached_thumb(game_path, &cached_px, &cached_alpha, &cached_w, &cached_h)) {
+                    if (cached_px) {
+                        logo_pixels = cached_px;
+                        logo_alpha = cached_alpha;
+                        logo_w = cached_w;
+                        logo_h = cached_h;
                         has_logo = true;
-                        local_thumb_allocated = true;
-                        local_alpha_allocated = true;
+                    }
+                } else {
+                    const char *last_slash = strrchr(game_path, '/');
+                    char dir_path[256] = "";
+                    const char *filename = game_path;
+                    if (last_slash) {
+                        size_t dlen = last_slash - game_path;
+                        if (dlen >= sizeof(dir_path)) dlen = sizeof(dir_path) - 1;
+                        strncpy(dir_path, game_path, dlen);
+                        dir_path[dlen] = '\0';
+                        filename = last_slash + 1;
+                    }
+                    char clean_name[128];
+                    strncpy(clean_name, filename, sizeof(clean_name) - 1);
+                    clean_name[sizeof(clean_name) - 1] = '\0';
+                    char *dot = strrchr(clean_name, '.');
+                    if (dot) *dot = '\0';
+
+                    static const char *grid_logo_patterns[] = {
+                        "%s/.res/%s-logo.rgb565",
+                        "%s/.res/%s_logo.rgb565",
+                        "%s/.res/%s.logo.rgb565",
+                        "%s/.res/%s-wheel.rgb565",
+                        "%s/.res/%s_wheel.rgb565",
+                        "%s/.res/%s-icon.rgb565",
+                        "%s/.res/%s_icon.rgb565",
+                        "%s/.res/%s.icon.rgb565",
+                        "%s/%s-logo.rgb565",
+                        "%s/%s_logo.rgb565",
+                        "%s/%s-wheel.rgb565",
+                        "%s/%s-icon.rgb565",
+                        "%s/.res/%s.rgb565",
+                        "%s/%s.rgb565",
+                        NULL
+                    };
+
+                    char test_path[512];
+                    uint16_t *raw_pixels = NULL;
+                    int raw_w = 0, raw_h = 0;
+
+                    for (int p = 0; grid_logo_patterns[p]; p++) {
+                        snprintf(test_path, sizeof(test_path), grid_logo_patterns[p], dir_path, clean_name);
+                        if (load_raw_horiz_rgb565(test_path, &raw_pixels, &raw_w, &raw_h)) {
+                            logo_pixels = raw_pixels;
+                            logo_alpha = NULL;
+                            logo_w = raw_w;
+                            logo_h = raw_h;
+                            has_logo = true;
+                            add_horiz_cached_thumb(game_path, raw_pixels, NULL, raw_w, raw_h);
+                            local_thumb_allocated = true;
+                            break;
+                        }
+                    }
+
+                    if (!has_logo) {
+                        static const char *grid_png_patterns[] = {
+                            "%s/.res/%s-logo.png",
+                            "%s/.res/%s_logo.png",
+                            "%s/.res/%s-wheel.png",
+                            "%s/.res/%s-icon.png",
+                            "%s/%s-logo.png",
+                            "%s/%s-icon.png",
+                            "%s/.res/%s.png",
+                            "%s/%s.png",
+                            NULL
+                        };
+
+                        uint8_t *raw_alpha = NULL;
+                        extern int load_png_rgba565(const char* filename, uint16_t** pixels, uint8_t** alpha, int* width, int* height);
+                        for (int p = 0; grid_png_patterns[p]; p++) {
+                            snprintf(test_path, sizeof(test_path), grid_png_patterns[p], dir_path, clean_name);
+                            if (load_png_rgba565(test_path, &raw_pixels, &raw_alpha, &raw_w, &raw_h)) {
+                                logo_pixels = raw_pixels;
+                                logo_alpha = raw_alpha;
+                                logo_w = raw_w;
+                                logo_h = raw_h;
+                                has_logo = true;
+                                add_horiz_cached_thumb(game_path, raw_pixels, raw_alpha, raw_w, raw_h);
+                                local_thumb_allocated = true;
+                                local_alpha_allocated = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!has_logo) {
+                        add_horiz_cached_thumb(game_path, NULL, NULL, 0, 0); // Negative cache hit
                     }
                 }
             }

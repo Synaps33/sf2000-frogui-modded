@@ -1092,6 +1092,13 @@ bool gfx_theme_get_show_game_icons(void) {
     return false;
 }
 
+bool gfx_theme_has_custom_show_game_icons(void) {
+    if (current_gfx_theme >= 0 && gfx_themes[current_gfx_theme].has_custom_show_game_icons) {
+        return true;
+    }
+    return false;
+}
+
 uint32_t gfx_theme_get_game_name_color(void) {
     if (current_gfx_theme >= 0 && gfx_themes[current_gfx_theme].has_custom_game_name_color) {
         return gfx_themes[current_gfx_theme].game_name_color;
@@ -1559,15 +1566,21 @@ static int load_raw_rgb565_logo(const char *path, uint16_t **pixels, uint8_t **a
     long file_size = ftell(fp);
     fseek(fp, 0, SEEK_SET);
 
+    static const int dimensions[][2] = {
+        {64, 64}, {80, 40}, {100, 50}, {120, 60}, {128, 64}, {128, 128},
+        {140, 70}, {144, 208}, {150, 75}, {160, 80}, {160, 100}, {160, 160},
+        {200, 80}, {200, 100}, {200, 200}, {250, 200}, {200, 250}, {320, 240}
+    };
+    int num_dims = sizeof(dimensions) / sizeof(dimensions[0]);
     int w = 0, h = 0;
-    if (file_size == 144 * 208 * 2) { w = 144; h = 208; }
-    else if (file_size == 160 * 160 * 2) { w = 160; h = 160; }
-    else if (file_size == 128 * 128 * 2) { w = 128; h = 128; }
-    else if (file_size == 200 * 200 * 2) { w = 200; h = 200; }
-    else if (file_size == 250 * 200 * 2) { w = 250; h = 200; }
-    else if (file_size == 320 * 240 * 2) { w = 320; h = 240; }
-    else if (file_size == 64 * 64 * 2) { w = 64; h = 64; }
-    else {
+    for (int i = 0; i < num_dims; i++) {
+        if (dimensions[i][0] * dimensions[i][1] * 2 == file_size) {
+            w = dimensions[i][0];
+            h = dimensions[i][1];
+            break;
+        }
+    }
+    if (w == 0) {
         fclose(fp);
         return 0;
     }
@@ -1649,19 +1662,38 @@ int gfx_theme_load_entry_logo(const char *name, bool is_platform, uint16_t **pix
         if (load_raw_rgb565_logo(logo_path, &logo_cache[idx].pixels, &logo_cache[idx].alpha, &logo_cache[idx].width, &logo_cache[idx].height)) loaded = 1;
     }
 
-    // 2. Try current ROM folder path: .rgb565 first
+    // 2. Try current ROM folder path: logo variants first, then standard .rgb565
     if (!loaded && current_platform[0] != '\0') {
-        // Fast paths: .rgb565 variants
-        snprintf(logo_path, sizeof(logo_path), "%s/%s/.res/%s.rgb565", ROMS_PATH, current_platform, clean_name);
+        snprintf(logo_path, sizeof(logo_path), "%s/%s/.res/%s-logo.rgb565", ROMS_PATH, current_platform, clean_name);
         if (load_raw_rgb565_logo(logo_path, &logo_cache[idx].pixels, &logo_cache[idx].alpha, &logo_cache[idx].width, &logo_cache[idx].height)) loaded = 1;
 
         if (!loaded) {
-            snprintf(logo_path, sizeof(logo_path), "%s/%s/%s.rgb565", ROMS_PATH, current_platform, clean_name);
+            snprintf(logo_path, sizeof(logo_path), "%s/%s/.res/%s_logo.rgb565", ROMS_PATH, current_platform, clean_name);
             if (load_raw_rgb565_logo(logo_path, &logo_cache[idx].pixels, &logo_cache[idx].alpha, &logo_cache[idx].width, &logo_cache[idx].height)) loaded = 1;
         }
 
         if (!loaded) {
-            snprintf(logo_path, sizeof(logo_path), "%s/%s/.res/%s-logo.rgb565", ROMS_PATH, current_platform, clean_name);
+            snprintf(logo_path, sizeof(logo_path), "%s/%s/.res/%s-wheel.rgb565", ROMS_PATH, current_platform, clean_name);
+            if (load_raw_rgb565_logo(logo_path, &logo_cache[idx].pixels, &logo_cache[idx].alpha, &logo_cache[idx].width, &logo_cache[idx].height)) loaded = 1;
+        }
+
+        if (!loaded) {
+            snprintf(logo_path, sizeof(logo_path), "%s/%s/.res/%s-icon.rgb565", ROMS_PATH, current_platform, clean_name);
+            if (load_raw_rgb565_logo(logo_path, &logo_cache[idx].pixels, &logo_cache[idx].alpha, &logo_cache[idx].width, &logo_cache[idx].height)) loaded = 1;
+        }
+
+        if (!loaded) {
+            snprintf(logo_path, sizeof(logo_path), "%s/%s/.res/%s.rgb565", ROMS_PATH, current_platform, clean_name);
+            if (load_raw_rgb565_logo(logo_path, &logo_cache[idx].pixels, &logo_cache[idx].alpha, &logo_cache[idx].width, &logo_cache[idx].height)) loaded = 1;
+        }
+
+        if (!loaded) {
+            snprintf(logo_path, sizeof(logo_path), "%s/%s/%s-logo.rgb565", ROMS_PATH, current_platform, clean_name);
+            if (load_raw_rgb565_logo(logo_path, &logo_cache[idx].pixels, &logo_cache[idx].alpha, &logo_cache[idx].width, &logo_cache[idx].height)) loaded = 1;
+        }
+
+        if (!loaded) {
+            snprintf(logo_path, sizeof(logo_path), "%s/%s/%s.rgb565", ROMS_PATH, current_platform, clean_name);
             if (load_raw_rgb565_logo(logo_path, &logo_cache[idx].pixels, &logo_cache[idx].alpha, &logo_cache[idx].width, &logo_cache[idx].height)) loaded = 1;
         }
     }

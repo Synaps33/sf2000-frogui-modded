@@ -117,6 +117,12 @@ void render_apply_horizontal_gradient(uint16_t *framebuffer, int grad_width);
 // Draw game logo on right side with black/magenta chroma key
 void render_game_logo(uint16_t *framebuffer, const Thumbnail *logo, int center_x, int y, int max_w, int max_h);
 
+// Get current selected game logo if loaded
+const Thumbnail* get_current_game_logo(void);
+
+// Clear horizontal carousel thumbnail cache
+void render_clear_horiz_thumb_cache(void);
+
 // Set/get whether fullscreen vertical list art mode is active
 void render_set_vlist_fullscreen_art(bool active);
 bool render_get_vlist_fullscreen_art(void);

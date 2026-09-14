@@ -1402,6 +1402,13 @@ static void free_current_game_logo(void) {
     cached_game_logo_path[0] = '\0';
 }
 
+const Thumbnail* get_current_game_logo(void) {
+    if (game_logo_cache_valid && current_game_logo.data && current_game_logo.width > 0 && current_game_logo.height > 0) {
+        return &current_game_logo;
+    }
+    return NULL;
+}
+
 static int file_exists(const char *path) {
     if (!path || path[0] == '\0') return 0;
     FILE *f = fopen(path, "rb");
@@ -1535,10 +1542,19 @@ static void load_current_game_logo(void) {
         "%s/.res/%s.logo.rgb565",
         "%s/.res/%s-wheel.rgb565",
         "%s/.res/%s_wheel.rgb565",
+        "%s/.res/%s-icon.rgb565",
+        "%s/.res/%s_icon.rgb565",
+        "%s/.res/%s.icon.rgb565",
         "%s/.res/%s-logo.png",
         "%s/.res/%s_logo.png",
+        "%s/.res/%s-wheel.png",
+        "%s/.res/%s-icon.png",
         "%s/%s-logo.rgb565",
+        "%s/%s_logo.rgb565",
+        "%s/%s-wheel.rgb565",
+        "%s/%s-icon.rgb565",
         "%s/%s-logo.png",
+        "%s/%s-icon.png",
         NULL
     };
 
