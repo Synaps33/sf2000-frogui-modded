@@ -178,7 +178,8 @@ static const ConsoleMapping console_mappings[] = {
     {"qpsx", "pcsx4all"},
     {"psxb", "Beetle-PSX"},
     {"js", "js2000"},
-    {"js2000", "js2000"}
+    {"js2000", "js2000"},
+    {"brickgame", "brickgame"}
 };
 
 // Get core name for a console folder
@@ -207,12 +208,8 @@ const char* get_core_name_for_console(const char* console_name) {
 #define MAX_RECENT_GAMES 10
 #define INITIAL_ENTRIES_CAPACITY 64
 
-// Empty folders cache - avoid rescanning on every navigation
+// Legacy empty folders cache file path (cleaned up automatically)
 #define EMPTY_DIRS_CACHE_FILE "/mnt/sda1/configs/frogui_empty_dirs.cache"
-#define MAX_EMPTY_DIRS 256
-static char empty_dirs[MAX_EMPTY_DIRS][64];  // Store folder names (not full paths)
-static int empty_dirs_count = 0;
-static int empty_dirs_loaded = 0;
 
 // v30: Header logo (decoded from embedded PNG)
 static uint16_t *header_logo_pixels = NULL;
@@ -296,114 +293,34 @@ static int draw_header_logo(uint16_t *framebuffer, int x, int y) {
     return header_logo_width;
 }
 
-// Load empty directories cache from file (or rebuild if missing)
-static void load_empty_dirs_cache(void) {
-    if (empty_dirs_loaded) return;
-    empty_dirs_loaded = 1;
-    empty_dirs_count = 0;
+// Check if a directory is empty (no games or subdirectories, ignoring system/meta files)
+static int is_folder_empty(const char *folder_path) {
+    DIR *check = opendir(folder_path);
+    if (!check) return 1;
 
-    FILE *fp = fopen(EMPTY_DIRS_CACHE_FILE, "r");
-    if (!fp) {
-        // Cache file doesn't exist - rebuild it
-#ifdef SF2000
-        xlog("Empty dirs cache: file not found, rebuilding...\n");
-#else
-        printf("Empty dirs cache: file not found, rebuilding...\n");
-#endif
-        rebuild_empty_dirs_cache();
-        return;
-    }
+    int has_content = 0;
+    struct dirent *sub;
+    while ((sub = readdir(check)) != NULL) {
+        // Skip hidden files/directories (.res, ., ..)
+        if (sub->d_name[0] == '.') continue;
+        if (strcasecmp(sub->d_name, "frogui") == 0 ||
+            strcasecmp(sub->d_name, "saves") == 0 ||
+            strcasecmp(sub->d_name, "save") == 0 ||
+            strcasecmp(sub->d_name, "desktop.ini") == 0 ||
+            strcasecmp(sub->d_name, "thumbs.db") == 0) continue;
 
-    char line[64];
-    while (fgets(line, sizeof(line), fp) && empty_dirs_count < MAX_EMPTY_DIRS) {
-        // Remove newline
-        int len = strlen(line);
-        if (len > 0 && line[len-1] == '\n') line[len-1] = '\0';
-        if (line[0] != '\0') {
-            strncpy(empty_dirs[empty_dirs_count], line, sizeof(empty_dirs[0]) - 1);
-            empty_dirs[empty_dirs_count][sizeof(empty_dirs[0]) - 1] = '\0';
-            empty_dirs_count++;
-        }
+        has_content = 1;
+        break;
     }
-    fclose(fp);
-#ifdef SF2000
-    xlog("Empty dirs cache: loaded %d entries\n", empty_dirs_count);
-#else
-    printf("Empty dirs cache: loaded %d entries\n", empty_dirs_count);
-#endif
+    closedir(check);
+    return !has_content;
 }
 
-// Check if a folder name is in the empty dirs cache
-static int is_in_empty_cache(const char *folder_name) {
-    for (int i = 0; i < empty_dirs_count; i++) {
-        if (strcasecmp(empty_dirs[i], folder_name) == 0) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
-// Rebuild and save empty directories cache by scanning ROMS folder
+// Rebuild empty directories cache / refresh (legacy utility action)
 static void rebuild_empty_dirs_cache(void) {
     show_cache_rebuild_screen();
-    empty_dirs_count = 0;
-
-    DIR *dir = opendir(ROMS_PATH);
-    if (!dir) return;
-
-    struct dirent *ent;
-    while ((ent = readdir(dir)) != NULL && empty_dirs_count < MAX_EMPTY_DIRS) {
-        if (ent->d_name[0] == '.') continue;
-        if (strcasecmp(ent->d_name, "frogui") == 0 ||
-            strcasecmp(ent->d_name, "saves") == 0 ||
-            strcasecmp(ent->d_name, "save") == 0) continue;
-
-        // Skip non-directories using d_type (avoids stat() syscall)
-        if (ent->d_type != DT_DIR) continue;
-
-        // Save entry name BEFORE inner readdir (readdir uses static buffer!)
-        char entry_name[64];
-        strncpy(entry_name, ent->d_name, sizeof(entry_name) - 1);
-        entry_name[sizeof(entry_name) - 1] = '\0';
-
-        char full_path[MAX_PATH_LEN];
-        snprintf(full_path, sizeof(full_path), "%s/%s", ROMS_PATH, entry_name);
-
-        // Check if directory is empty via opendir/readdir
-        DIR *check = opendir(full_path);
-        if (check) {
-            int has_content = 0;
-            struct dirent *sub;
-            while ((sub = readdir(check)) != NULL) {
-                if (sub->d_name[0] != '.') {
-                    has_content = 1;
-                    break;
-                }
-            }
-            closedir(check);
-
-            if (!has_content) {
-                strncpy(empty_dirs[empty_dirs_count], entry_name, sizeof(empty_dirs[0]) - 1);
-                empty_dirs[empty_dirs_count][sizeof(empty_dirs[0]) - 1] = '\0';
-                empty_dirs_count++;
-            }
-        }
-    }
-    closedir(dir);
-
-    // Save to file
-    FILE *fp = fopen(EMPTY_DIRS_CACHE_FILE, "w");
-    if (fp) {
-        for (int i = 0; i < empty_dirs_count; i++) {
-            fprintf(fp, "%s\n", empty_dirs[i]);
-        }
-        fclose(fp);
-    }
-#ifdef SF2000
-    xlog("Empty dirs cache: rebuilt with %d entries\n", empty_dirs_count);
-#else
-    printf("Empty dirs cache: rebuilt with %d entries\n", empty_dirs_count);
-#endif
+    // Remove stale cache file if it exists
+    remove(EMPTY_DIRS_CACHE_FILE);
 }
 
 // Layout constants are now in render.h
@@ -2040,10 +1957,8 @@ static void scan_directory(const char *path) {
             }
 
             if (hide_empty_folders) {
-                // Load cache on first use (default to hiding if setting not found)
-                load_empty_dirs_cache();
-                if (is_in_empty_cache(entry_name)) {
-                    continue; // Skip cached empty directory
+                if (is_folder_empty(full_path)) {
+                    continue; // Skip empty directory
                 }
             }
         }
@@ -4513,6 +4428,9 @@ void retro_init(void) {
     settings_load();
 
     apply_settings();
+
+    // Remove legacy empty dirs cache file if present
+    remove(EMPTY_DIRS_CACHE_FILE);
 
     // Auto-launch most recent game if resume on boot is enabled
     if (resume_on_boot) auto_launch_recent_game();
