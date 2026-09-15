@@ -326,7 +326,6 @@ void render_draw_image_60x60(uint16_t *framebuffer, int start_x, int start_y,
 
 
 static int load_raw_horiz_rgb565(const char *path, uint16_t **pixels, int *width, int *height) {
-    if (access(path, F_OK) != 0) return 0;
     FILE *fp = fopen(path, "rb");
     if (!fp) return 0;
 
@@ -716,19 +715,8 @@ void render_menu_item(uint16_t *framebuffer, int index, const char *name, const 
 
                         static const char *horiz_logo_patterns[] = {
                             "%s/.res/%s-logo.rgb565",
-                            "%s/.res/%s_logo.rgb565",
-                            "%s/.res/%s.logo.rgb565",
-                            "%s/.res/%s-wheel.rgb565",
-                            "%s/.res/%s_wheel.rgb565",
-                            "%s/.res/%s-icon.rgb565",
-                            "%s/.res/%s_icon.rgb565",
-                            "%s/.res/%s.icon.rgb565",
-                            "%s/%s-logo.rgb565",
-                            "%s/%s_logo.rgb565",
-                            "%s/%s-wheel.rgb565",
-                            "%s/%s-icon.rgb565",
                             "%s/.res/%s.rgb565",
-                            "%s/%s.rgb565",
+                            "%s/.res/%s-wheel.rgb565",
                             NULL
                         };
 
@@ -753,13 +741,7 @@ void render_menu_item(uint16_t *framebuffer, int index, const char *name, const 
                         if (!has_logo) {
                             static const char *horiz_png_patterns[] = {
                                 "%s/.res/%s-logo.png",
-                                "%s/.res/%s_logo.png",
-                                "%s/.res/%s-wheel.png",
-                                "%s/.res/%s-icon.png",
-                                "%s/%s-logo.png",
-                                "%s/%s-icon.png",
                                 "%s/.res/%s.png",
-                                "%s/%s.png",
                                 NULL
                             };
 
@@ -961,19 +943,8 @@ void render_menu_item(uint16_t *framebuffer, int index, const char *name, const 
 
                     static const char *grid_logo_patterns[] = {
                         "%s/.res/%s-logo.rgb565",
-                        "%s/.res/%s_logo.rgb565",
-                        "%s/.res/%s.logo.rgb565",
-                        "%s/.res/%s-wheel.rgb565",
-                        "%s/.res/%s_wheel.rgb565",
-                        "%s/.res/%s-icon.rgb565",
-                        "%s/.res/%s_icon.rgb565",
-                        "%s/.res/%s.icon.rgb565",
-                        "%s/%s-logo.rgb565",
-                        "%s/%s_logo.rgb565",
-                        "%s/%s-wheel.rgb565",
-                        "%s/%s-icon.rgb565",
                         "%s/.res/%s.rgb565",
-                        "%s/%s.rgb565",
+                        "%s/.res/%s-wheel.rgb565",
                         NULL
                     };
 
@@ -998,13 +969,7 @@ void render_menu_item(uint16_t *framebuffer, int index, const char *name, const 
                     if (!has_logo) {
                         static const char *grid_png_patterns[] = {
                             "%s/.res/%s-logo.png",
-                            "%s/.res/%s_logo.png",
-                            "%s/.res/%s-wheel.png",
-                            "%s/.res/%s-icon.png",
-                            "%s/%s-logo.png",
-                            "%s/%s-icon.png",
                             "%s/.res/%s.png",
-                            "%s/%s.png",
                             NULL
                         };
 
@@ -1237,22 +1202,17 @@ int load_thumbnail(const char *rgb565_path, Thumbnail *thumb) {
         res_base[res_len - 7] = '\0';
     }
 
-    // Try -bg.rgb565 and _bg.rgb565 variants
+    // 1. Try standard raw RGB565 from .res folder (fastest and most common!)
+    if (load_raw_rgb565(rgb565_path, thumb)) {
+        xlog("THUMB: rgb565 OK\n");
+        return 1;
+    }
+
+    // 2. Try -bg.rgb565 variant for fullscreen background art
     char bg_try[520];
     snprintf(bg_try, sizeof(bg_try), "%s-bg.rgb565", res_base);
     if (load_raw_rgb565(bg_try, thumb)) {
         xlog("THUMB: -bg.rgb565 OK\n");
-        return 1;
-    }
-    snprintf(bg_try, sizeof(bg_try), "%s_bg.rgb565", res_base);
-    if (load_raw_rgb565(bg_try, thumb)) {
-        xlog("THUMB: _bg.rgb565 OK\n");
-        return 1;
-    }
-
-    // 1. Try raw RGB565 from .res folder
-    if (load_raw_rgb565(rgb565_path, thumb)) {
-        xlog("THUMB: rgb565 OK\n");
         return 1;
     }
 
@@ -1261,7 +1221,7 @@ int load_thumbnail(const char *rgb565_path, Thumbnail *thumb) {
     int w = 0, h = 0;
     char try_path[520];
 
-    // v72: 2. Try other formats in .res folder (PNG, JPG, WebP, BMP, GIF)
+    // 3. Try PNG and JPG in .res folder
     snprintf(try_path, sizeof(try_path), "%s.png", res_base);
     if (load_png_rgb565(try_path, &loaded_data, &w, &h)) {
         xlog("THUMB: .res png OK %dx%d\n", w, h);
@@ -1274,54 +1234,25 @@ int load_thumbnail(const char *rgb565_path, Thumbnail *thumb) {
         goto convert_success;
     }
 
-    snprintf(try_path, sizeof(try_path), "%s.webp", res_base);
-    if (load_webp_rgb565(try_path, &loaded_data, &w, &h)) {
-        xlog("THUMB: .res webp OK %dx%d\n", w, h);
-        goto convert_success;
-    }
-
-    snprintf(try_path, sizeof(try_path), "%s.bmp", res_base);
-    if (load_bmp_rgb565(try_path, &loaded_data, &w, &h)) {
-        xlog("THUMB: .res bmp OK %dx%d\n", w, h);
-        goto convert_success;
-    }
-
-    snprintf(try_path, sizeof(try_path), "%s.gif", res_base);
-    if (load_gif_rgb565(try_path, &loaded_data, &w, &h)) {
-        xlog("THUMB: .res gif OK %dx%d\n", w, h);
-        goto convert_success;
-    }
-
-    // 3. Build ROM folder path by removing "/.res/" from path
-    // rgb565_path: /roms/nes/.res/mario.rgb565
-    // we want:     /roms/nes/mario
+    // 4. Build ROM folder path by removing "/.res/" from path
     char rom_path[512];
     strncpy(rom_path, rgb565_path, sizeof(rom_path) - 1);
     rom_path[sizeof(rom_path) - 1] = '\0';
 
-    // Find and remove /.res/ from path
     char *res_ptr = strstr(rom_path, "/.res/");
     if (!res_ptr) {
         res_ptr = strstr(rom_path, "\\.res\\");  // Windows style
     }
     if (res_ptr) {
-        // Move everything after /.res/ to replace it
         memmove(res_ptr + 1, res_ptr + 6, strlen(res_ptr + 6) + 1);
     }
 
-    // Remove .rgb565 extension
     size_t len = strlen(rom_path);
     if (len > 7 && strcmp(rom_path + len - 7, ".rgb565") == 0) {
         rom_path[len - 7] = '\0';
     }
 
-    // 4. Try formats in ROM folder (WebP, PNG, JPG, BMP, GIF)
-    snprintf(try_path, sizeof(try_path), "%s.webp", rom_path);
-    if (load_webp_rgb565(try_path, &loaded_data, &w, &h)) {
-        xlog("THUMB: rom webp OK %dx%d\n", w, h);
-        goto convert_success;
-    }
-
+    // 5. Try PNG and JPG in ROM folder
     snprintf(try_path, sizeof(try_path), "%s.png", rom_path);
     if (load_png_rgb565(try_path, &loaded_data, &w, &h)) {
         xlog("THUMB: rom png OK %dx%d\n", w, h);
@@ -1331,18 +1262,6 @@ int load_thumbnail(const char *rgb565_path, Thumbnail *thumb) {
     snprintf(try_path, sizeof(try_path), "%s.jpg", rom_path);
     if (load_jpeg_rgb565(try_path, &loaded_data, &w, &h)) {
         xlog("THUMB: rom jpg OK %dx%d\n", w, h);
-        goto convert_success;
-    }
-
-    snprintf(try_path, sizeof(try_path), "%s.bmp", rom_path);
-    if (load_bmp_rgb565(try_path, &loaded_data, &w, &h)) {
-        xlog("THUMB: rom bmp OK %dx%d\n", w, h);
-        goto convert_success;
-    }
-
-    snprintf(try_path, sizeof(try_path), "%s.gif", rom_path);
-    if (load_gif_rgb565(try_path, &loaded_data, &w, &h)) {
-        xlog("THUMB: rom gif OK %dx%d\n", w, h);
         goto convert_success;
     }
 
@@ -1370,11 +1289,6 @@ convert_success:
 // v42: load_raw_rgb565 uses universal_buffer
 
 int load_raw_rgb565(const char *path, Thumbnail *thumb) {
-    // Check if file exists
-    if (access(path, F_OK) != 0) {
-        return 0;
-    }
-    
     FILE *fp = fopen(path, "rb");
     if (!fp) {
         return 0;

@@ -1558,7 +1558,6 @@ int gfx_theme_load_platform_logo(const char *platform_name, uint16_t **pixels, u
 }
 
 static int load_raw_rgb565_logo(const char *path, uint16_t **pixels, uint8_t **alpha, int *width, int *height) {
-    if (access(path, F_OK) != 0) return 0;
     FILE *fp = fopen(path, "rb");
     if (!fp) return 0;
 
@@ -1668,32 +1667,12 @@ int gfx_theme_load_entry_logo(const char *name, bool is_platform, uint16_t **pix
         if (load_raw_rgb565_logo(logo_path, &logo_cache[idx].pixels, &logo_cache[idx].alpha, &logo_cache[idx].width, &logo_cache[idx].height)) loaded = 1;
 
         if (!loaded) {
-            snprintf(logo_path, sizeof(logo_path), "%s/%s/.res/%s_logo.rgb565", ROMS_PATH, current_platform, clean_name);
-            if (load_raw_rgb565_logo(logo_path, &logo_cache[idx].pixels, &logo_cache[idx].alpha, &logo_cache[idx].width, &logo_cache[idx].height)) loaded = 1;
-        }
-
-        if (!loaded) {
-            snprintf(logo_path, sizeof(logo_path), "%s/%s/.res/%s-wheel.rgb565", ROMS_PATH, current_platform, clean_name);
-            if (load_raw_rgb565_logo(logo_path, &logo_cache[idx].pixels, &logo_cache[idx].alpha, &logo_cache[idx].width, &logo_cache[idx].height)) loaded = 1;
-        }
-
-        if (!loaded) {
-            snprintf(logo_path, sizeof(logo_path), "%s/%s/.res/%s-icon.rgb565", ROMS_PATH, current_platform, clean_name);
-            if (load_raw_rgb565_logo(logo_path, &logo_cache[idx].pixels, &logo_cache[idx].alpha, &logo_cache[idx].width, &logo_cache[idx].height)) loaded = 1;
-        }
-
-        if (!loaded) {
             snprintf(logo_path, sizeof(logo_path), "%s/%s/.res/%s.rgb565", ROMS_PATH, current_platform, clean_name);
             if (load_raw_rgb565_logo(logo_path, &logo_cache[idx].pixels, &logo_cache[idx].alpha, &logo_cache[idx].width, &logo_cache[idx].height)) loaded = 1;
         }
 
         if (!loaded) {
-            snprintf(logo_path, sizeof(logo_path), "%s/%s/%s-logo.rgb565", ROMS_PATH, current_platform, clean_name);
-            if (load_raw_rgb565_logo(logo_path, &logo_cache[idx].pixels, &logo_cache[idx].alpha, &logo_cache[idx].width, &logo_cache[idx].height)) loaded = 1;
-        }
-
-        if (!loaded) {
-            snprintf(logo_path, sizeof(logo_path), "%s/%s/%s.rgb565", ROMS_PATH, current_platform, clean_name);
+            snprintf(logo_path, sizeof(logo_path), "%s/%s/.res/%s-wheel.rgb565", ROMS_PATH, current_platform, clean_name);
             if (load_raw_rgb565_logo(logo_path, &logo_cache[idx].pixels, &logo_cache[idx].alpha, &logo_cache[idx].width, &logo_cache[idx].height)) loaded = 1;
         }
     }

@@ -422,7 +422,9 @@ static int screenshot_cache_valid = 0;
 // Game logo cache (game_name-logo.rgb565, etc.)
 static Thumbnail current_game_logo;
 static char cached_game_logo_path[MAX_PATH_LEN];
+static char cached_game_logo_for_game[MAX_PATH_LEN];
 static int game_logo_cache_valid = 0;
+static int thumbnail_res_exists = 0;  // Does .res/ directory exist?
 
 // Text scrolling state
 static int text_scroll_frame_counter = 0;
@@ -1400,6 +1402,7 @@ static void free_current_game_logo(void) {
     current_game_logo.height = 0;
     game_logo_cache_valid = 0;
     cached_game_logo_path[0] = '\0';
+    cached_game_logo_for_game[0] = '\0';
 }
 
 const Thumbnail* get_current_game_logo(void) {
@@ -1407,16 +1410,6 @@ const Thumbnail* get_current_game_logo(void) {
         return &current_game_logo;
     }
     return NULL;
-}
-
-static int file_exists(const char *path) {
-    if (!path || path[0] == '\0') return 0;
-    FILE *f = fopen(path, "rb");
-    if (f) {
-        fclose(f);
-        return 1;
-    }
-    return 0;
 }
 
 static int load_game_logo_from_file(const char *path, Thumbnail *logo) {
@@ -1516,9 +1509,32 @@ static void load_current_game_logo(void) {
         return;
     }
 
+    if (cached_game_logo_for_game[0] != '\0' && strcmp(cached_game_logo_for_game, game_path) == 0) {
+        return; // Already resolved for this game (either logo is loaded or known negative hit)
+    }
+
+    // Free previous logo memory before resolving for new game
+    if (current_game_logo.data) {
+        free(current_game_logo.data);
+        current_game_logo.data = NULL;
+    }
+    current_game_logo.width = 0;
+    current_game_logo.height = 0;
+    game_logo_cache_valid = 0;
+    cached_game_logo_path[0] = '\0';
+
+    strncpy(cached_game_logo_for_game, game_path, sizeof(cached_game_logo_for_game) - 1);
+    cached_game_logo_for_game[sizeof(cached_game_logo_for_game) - 1] = '\0';
+
     const char *last_slash = strrchr(game_path, '/');
     if (!last_slash) {
-        free_current_game_logo();
+        return;
+    }
+
+    // If .res/ directory does not exist in standard directory mode, skip probing .res/
+    if (strcmp(current_path, "RECENT_GAMES") != 0 &&
+        strcmp(current_path, "FAVORITES") != 0 &&
+        !thumbnail_res_exists) {
         return;
     }
 
@@ -1538,43 +1554,21 @@ static void load_current_game_logo(void) {
     char try_path[MAX_PATH_LEN];
     const char *patterns[] = {
         "%s/.res/%s-logo.rgb565",
-        "%s/.res/%s_logo.rgb565",
-        "%s/.res/%s.logo.rgb565",
+        "%s/.res/%s.rgb565",
         "%s/.res/%s-wheel.rgb565",
-        "%s/.res/%s_wheel.rgb565",
-        "%s/.res/%s-icon.rgb565",
-        "%s/.res/%s_icon.rgb565",
-        "%s/.res/%s.icon.rgb565",
         "%s/.res/%s-logo.png",
-        "%s/.res/%s_logo.png",
-        "%s/.res/%s-wheel.png",
-        "%s/.res/%s-icon.png",
-        "%s/%s-logo.rgb565",
-        "%s/%s_logo.rgb565",
-        "%s/%s-wheel.rgb565",
-        "%s/%s-icon.rgb565",
-        "%s/%s-logo.png",
-        "%s/%s-icon.png",
         NULL
     };
 
     for (int p = 0; patterns[p]; p++) {
         snprintf(try_path, sizeof(try_path), patterns[p], dir_path, clean_name);
-        if (file_exists(try_path)) {
-            if (game_logo_cache_valid && strcmp(cached_game_logo_path, try_path) == 0) {
-                return;
-            }
-            free_current_game_logo();
-            if (load_game_logo_from_file(try_path, &current_game_logo)) {
-                strncpy(cached_game_logo_path, try_path, sizeof(cached_game_logo_path) - 1);
-                cached_game_logo_path[sizeof(cached_game_logo_path) - 1] = '\0';
-                game_logo_cache_valid = 1;
-                return;
-            }
+        if (load_game_logo_from_file(try_path, &current_game_logo)) {
+            strncpy(cached_game_logo_path, try_path, sizeof(cached_game_logo_path) - 1);
+            cached_game_logo_path[sizeof(cached_game_logo_path) - 1] = '\0';
+            game_logo_cache_valid = 1;
+            return;
         }
     }
-
-    free_current_game_logo();
 }
 
 static bool is_vlist_fullscreen_art_enabled(void) {
@@ -1902,7 +1896,6 @@ static int screenshot_cache_count = 0;
 #define MAX_THUMBNAILS_CACHE 512
 static char thumbnail_cache_names[MAX_THUMBNAILS_CACHE][256];
 static int thumbnail_cache_count = 0;
-static int thumbnail_res_exists = 0;  // Does .res/ directory exist?
 
 // v52: Check if filename (without extension) matches image name (without extension)
 // Used for both screenshots and thumbnails
